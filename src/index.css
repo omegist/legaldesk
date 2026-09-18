@@ -1,0 +1,115 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Legal Diary Premium Dark Theme */
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 36 33% 94%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 36 33% 94%;
+
+    --popover: 222 47% 10%;
+    --popover-foreground: 36 33% 94%;
+
+    --primary: 38 72% 50%;
+    --primary-foreground: 222 47% 6%;
+
+    --secondary: 222 30% 14%;
+    --secondary-foreground: 36 33% 94%;
+
+    --muted: 222 30% 18%;
+    --muted-foreground: 220 15% 55%;
+
+    --accent: 38 72% 50%;
+    --accent-foreground: 222 47% 6%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 36 33% 94%;
+
+    --border: 222 30% 18%;
+    --input: 222 30% 14%;
+    --ring: 38 72% 50%;
+
+    --radius: 0.75rem;
+
+    /* Custom Legal Theme Colors */
+    --gold: 38 72% 50%;
+    --gold-light: 38 72% 65%;
+    --gold-dark: 38 72% 35%;
+    --navy: 222 47% 11%;
+    --navy-light: 222 35% 20%;
+    --court-brown: 30 30% 25%;
+
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 36 33% 94%;
+    --sidebar-primary: 38 72% 50%;
+    --sidebar-primary-foreground: 222 47% 6%;
+    --sidebar-accent: 222 30% 14%;
+    --sidebar-accent-foreground: 36 33% 94%;
+    --sidebar-border: 222 30% 18%;
+    --sidebar-ring: 38 72% 50%;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 36 33% 94%;
+    --card: 222 47% 8%;
+    --card-foreground: 36 33% 94%;
+    --popover: 222 47% 10%;
+    --popover-foreground: 36 33% 94%;
+    --primary: 38 72% 50%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 222 30% 14%;
+    --secondary-foreground: 36 33% 94%;
+    --muted: 222 30% 18%;
+    --muted-foreground: 220 15% 55%;
+    --accent: 38 72% 50%;
+    --accent-foreground: 222 47% 6%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 36 33% 94%;
+    --border: 222 30% 18%;
+    --input: 222 30% 14%;
+    --ring: 38 72% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+  }
+}
+
+@layer utilities {
+  .glass-effect {
+    @apply bg-card/80 backdrop-blur-lg border border-border/50;
+  }
+  
+  .gold-gradient {
+    background: linear-gradient(135deg, hsl(var(--gold)) 0%, hsl(var(--gold-light)) 50%, hsl(var(--gold)) 100%);
+  }
+  
+  .text-gold-gradient {
+    background: linear-gradient(135deg, hsl(var(--gold)) 0%, hsl(var(--gold-light)) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .legal-pattern {
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23b8860b' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2, Save, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -27,6 +27,58 @@ export default function Profile() {
   const [enrollmentNumber, setEnrollmentNumber] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  const AVATAR_BUCKET = 'avatars';
+
+  const handlePhotoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Please choose an image file', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Image is too large', description: 'Please choose one under 5MB.', variant: 'destructive' });
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    const ext = file.name.split('.').pop();
+    // One file per user (fixed name), so re-uploading replaces the old photo
+    // instead of accumulating unused files in the bucket.
+    const path = `${user.id}/avatar.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(AVATAR_BUCKET)
+      .upload(path, file, { upsert: true });
+
+    if (uploadError) {
+      setIsUploadingPhoto(false);
+      toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+    // Cache-bust so the new photo shows immediately even though the path is identical.
+    const photoUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ profile_photo_url: photoUrl })
+      .eq('id', user.id);
+
+    setIsUploadingPhoto(false);
+
+    if (updateError) {
+      toast({ title: 'Could not save photo', description: updateError.message, variant: 'destructive' });
+      return;
+    }
+
+    await refreshProfile();
+    toast({ title: 'Profile photo updated' });
+  };
 
   useEffect(() => {
     if (!profile || !user) return;
@@ -105,12 +157,33 @@ export default function Profile() {
       <Header />
       <main className="container max-w-xl py-6 space-y-6">
         <div className="flex items-center gap-4">
-          <Avatar className="h-16 w-16 border-2 border-primary/20">
-            <AvatarImage src={profile.profile_photo_url ?? undefined} alt={profile.name} />
-            <AvatarFallback className="bg-primary/10 text-primary text-xl">
-              {profile.name?.charAt(0) || 'U'}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative">
+            <Avatar className="h-16 w-16 border-2 border-primary/20">
+              <AvatarImage src={profile.profile_photo_url ?? undefined} alt={profile.name} />
+              <AvatarFallback className="bg-primary/10 text-primary text-xl">
+                {profile.name?.charAt(0) || 'U'}
+              </AvatarFallback>
+            </Avatar>
+            <label
+              htmlFor="avatar-upload"
+              className="absolute -bottom-1 -right-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground"
+              aria-label="Change profile photo"
+            >
+              {isUploadingPhoto ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Camera className="h-3.5 w-3.5" />
+              )}
+            </label>
+            <input
+              id="avatar-upload"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoSelected}
+              disabled={isUploadingPhoto}
+            />
+          </div>
           <div>
             <h1 className="font-serif text-2xl font-bold">{profile.name || 'Your profile'}</h1>
             <div className="flex items-center gap-2 mt-1">

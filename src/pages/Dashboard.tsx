@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Briefcase, Gavel, ClipboardList, Loader2, Clock, MapPin } from 'lucide-react';
+import { Plus, Briefcase, Gavel, ClipboardList, Loader2, Clock, MapPin, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,16 +25,45 @@ function weekDays(reference: Date) {
   });
 }
 
+function addDays(date: Date, amount: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + amount);
+  return result;
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const [cases, setCases] = useState<Diary[]>([]);
   const [pendingInvites, setPendingInvites] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(toISODate(new Date()));
+  const [today, setToday] = useState(() => new Date());
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(() => toISODate(new Date()));
 
-  const days = useMemo(() => weekDays(new Date()), []);
-  const today = toISODate(new Date());
+  const todayISO = toISODate(today);
+  const days = useMemo(() => weekDays(addDays(today, weekOffset * 7)), [today, weekOffset]);
+
+  const changeWeek = (amount: number) => {
+    setWeekOffset((offset) => offset + amount);
+    setSelectedDate((date) => toISODate(addDays(new Date(`${date}T00:00:00`), amount * 7)));
+  };
+
+  // Refresh at midnight so an open dashboard automatically moves to the new week.
+  useEffect(() => {
+    const refreshDate = () => setToday(new Date());
+    const millisecondsUntilMidnight = (() => {
+      const nextMidnight = new Date();
+      nextMidnight.setHours(24, 0, 1, 0);
+      return nextMidnight.getTime() - Date.now();
+    })();
+    const timeout = window.setTimeout(refreshDate, millisecondsUntilMidnight);
+    return () => window.clearTimeout(timeout);
+  }, [today]);
+
+  useEffect(() => {
+    if (weekOffset === 0) setSelectedDate(todayISO);
+  }, [todayISO, weekOffset]);
 
   useEffect(() => {
     if (!user) return;
@@ -44,7 +73,10 @@ export default function Dashboard() {
         supabase
           .from('partner_relationships')
           .select('id', { count: 'exact', head: true })
-          .eq('status', 'pending'),
+          .eq('status', 'pending')
+          // Only requests waiting on THIS user to respond — not ones they sent
+          // themselves and are still waiting on someone else for.
+          .neq('requested_by', user.id),
       ]);
       setCases((diaries as Diary[]) ?? []);
       setPendingInvites(count ?? 0);
@@ -54,7 +86,7 @@ export default function Dashboard() {
   }, [user]);
 
   const activeCases = cases.filter((c) => c.status === 'active');
-  const hearingsToday = cases.filter((c) => c.matter_date === today);
+  const hearingsToday = cases.filter((c) => c.matter_date === todayISO);
   const hearingsSelected = cases.filter((c) => c.matter_date === selectedDate);
   // "Tasks pending" = matters adjourned without a fresh date, plus partner invitations awaiting a reply.
   const tasksPending = cases.filter((c) => c.status === 'adjourned').length + pendingInvites;
@@ -66,7 +98,8 @@ export default function Dashboard() {
       <main className="container py-6">
         <div className="mb-6">
           <h1 className="font-serif text-2xl md:text-3xl font-bold">
-            Good day{profile?.name ? `, ${profile.name.split(' ')[0]}` : ''}
+            {profile?.role === 'partner' ? 'Partner workspace' : 'Good day'}
+            {profile?.name ? `, ${profile.name.split(' ')[0]}` : ''}
           </h1>
           <p className="text-muted-foreground text-sm">
             {new Date().toLocaleDateString('en-IN', {
@@ -78,11 +111,50 @@ export default function Dashboard() {
           </p>
         </div>
 
+        {pendingInvites > 0 && (
+          <button
+            onClick={() => navigate('/partners')}
+            className="mb-6 flex w-full items-center gap-3 rounded-xl border border-primary/40 bg-primary/10 p-4 text-left transition-colors hover:bg-primary/15"
+          >
+            <UserPlus className="h-5 w-5 shrink-0 text-primary" />
+            <span className="text-sm">
+              <span className="font-medium">
+                {pendingInvites} partner request{pendingInvites > 1 ? 's' : ''} waiting
+              </span>
+              <span className="text-muted-foreground"> — tap to review</span>
+            </span>
+          </button>
+        )}
+
         {/* Week strip */}
+        <div className="mb-2 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => changeWeek(-1)}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label="Previous week"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <p className="text-sm font-medium text-muted-foreground">
+            {days[0].toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+            {days[0].getMonth() !== days[6].getMonth()
+              ? ` – ${days[6].toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`
+              : ''}
+          </p>
+          <button
+            type="button"
+            onClick={() => changeWeek(1)}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label="Next week"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
         <div className="mb-6 grid grid-cols-7 gap-1.5">
           {days.map((d) => {
             const iso = toISODate(d);
-            const isToday = iso === today;
+            const isToday = iso === todayISO;
             const isSelected = iso === selectedDate;
             const hasHearing = cases.some((c) => c.matter_date === iso);
             return (
@@ -121,7 +193,7 @@ export default function Dashboard() {
         {/* Metrics */}
         <div className="grid grid-cols-3 gap-3 mb-8">
           {[
-            { label: 'Active Cases', value: activeCases.length, icon: Briefcase },
+            { label: profile?.role === 'partner' ? 'Shared Cases' : 'Active Cases', value: activeCases.length, icon: Briefcase },
             { label: 'Hearings Today', value: hearingsToday.length, icon: Gavel },
             { label: 'Tasks Pending', value: tasksPending, icon: ClipboardList },
           ].map((m) => (
@@ -141,7 +213,7 @@ export default function Dashboard() {
         <Card className="glass-effect border-primary/20">
           <CardHeader>
             <CardTitle className="font-serif text-xl">
-              {selectedDate === today
+              {selectedDate === todayISO
                 ? "Today's Board"
                 : new Date(selectedDate).toLocaleDateString('en-IN', {
                     weekday: 'long',

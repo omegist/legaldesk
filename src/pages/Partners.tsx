@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Header } from '@/components/layout/Header';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,6 +38,7 @@ export default function Partners() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'lawyer' | 'partner'>('all');
   const [results, setResults] = useState<DirectoryResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [relationships, setRelationships] = useState<Relationship[]>([]);
@@ -86,12 +87,16 @@ export default function Partners() {
       setIsSearching(true);
       // search_directory is a security-definer RPC â€” it deliberately excludes
       // email/phone/enrollment number from what it returns.
-      const { data, error } = await supabase.rpc('search_directory', { _query: q });
+      const { data, error } = await supabase.rpc('search_directory', {
+        _query: q,
+        ...(roleFilter === 'all' ? {} : { _role: roleFilter }),
+      });
       if (!error) setResults((data as DirectoryResult[]) ?? []);
+      if (error) setResults([]);
       setIsSearching(false);
     }, 300);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, roleFilter]);
 
   const connectedIds = new Set(
     relationships.map((r) => (r.lawyer_id === user?.id ? r.partner_id : r.lawyer_id)),
@@ -146,8 +151,23 @@ export default function Partners() {
         <div>
           <h1 className="font-serif text-2xl font-bold mb-1">Partners</h1>
           <p className="text-sm text-muted-foreground">
-            Find and connect with other lawyers and partners on Legal Diary.
+            Search verified professionals and send a connection request. Contact details and cases stay private.
           </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {(['all', 'lawyer', 'partner'] as const).map((role) => (
+            <Button
+              key={role}
+              type="button"
+              size="sm"
+              variant={roleFilter === role ? 'default' : 'outline'}
+              onClick={() => setRoleFilter(role)}
+              className={roleFilter === role ? 'gold-gradient text-primary-foreground' : 'border-primary/30'}
+            >
+              {role === 'all' ? 'All professionals' : role === 'lawyer' ? 'Lawyers' : 'Partners'}
+            </Button>
+          ))}
         </div>
 
         <div className="relative">
@@ -174,6 +194,7 @@ export default function Partners() {
                 <Card key={r.id} className="border-border/60 bg-card/70">
                   <CardContent className="p-4 flex items-center gap-3">
                     <Avatar className="h-11 w-11 border border-primary/20">
+                      <AvatarImage src={r.profile_photo_url ?? undefined} alt={r.name} />
                       <AvatarFallback className="bg-primary/10 text-primary">
                         {r.name?.charAt(0) || 'U'}
                       </AvatarFallback>

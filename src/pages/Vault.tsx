@@ -17,9 +17,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { deleteDocumentFromR2, openDocumentFromR2, uploadDocumentToR2 } from '@/lib/r2';
 import { DOCUMENT_CATEGORIES, type CaseDocument, type DocumentCategory, type Diary } from '@/types';
-
-const BUCKET = 'case-documents';
 
 export default function Vault() {
   const { user } = useAuth();
@@ -52,12 +51,16 @@ export default function Vault() {
   const handleUpload = async (file: File) => {
     if (!user) return;
     setIsUploading(true);
-    const key = `${user.id}/${crypto.randomUUID()}-${file.name}`;
-    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(key, file);
-
-    if (uploadError) {
+    let key: string;
+    try {
+      ({ key } = await uploadDocumentToR2(file));
+    } catch (uploadError) {
       setIsUploading(false);
-      toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
+      toast({
+        title: 'Upload failed',
+        description: uploadError instanceof Error ? uploadError.message : 'Could not upload the file.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -82,18 +85,29 @@ export default function Vault() {
   };
 
   const openDoc = async (doc: CaseDocument) => {
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(doc.storage_key, 60);
-    if (error || !data) {
-      toast({ title: 'Could not open file', variant: 'destructive' });
+    try {
+      await openDocumentFromR2(doc.storage_key);
+    } catch (error) {
+      toast({
+        title: 'Could not open file',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
       return;
     }
-    window.open(data.signedUrl, '_blank', 'noopener');
   };
 
   const removeDoc = async (doc: CaseDocument) => {
-    await supabase.storage.from(BUCKET).remove([doc.storage_key]);
+    try {
+      await deleteDocumentFromR2(doc.storage_key);
+    } catch (error) {
+      toast({
+        title: 'Could not delete file',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+      return;
+    }
     await supabase.from('documents').delete().eq('id', doc.id);
     load();
   };

@@ -67,7 +67,7 @@ export default function Home() {
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button
                   size="lg"
-                  onClick={() => navigate('/get-started')}
+                  onClick={() => navigate('/auth')}
                   className="gold-gradient text-primary-foreground text-lg px-8"
                 >
                   Get Started
@@ -75,7 +75,7 @@ export default function Home() {
                 <Button
                   size="lg"
                   variant="outline"
-                  onClick={() => navigate('/login')}
+                  onClick={() => navigate('/auth')}
                   className="text-lg px-8"
                 >
                   Sign In
@@ -142,7 +142,7 @@ export default function Home() {
               {!isAuthenticated && (
                 <Button
                   size="lg"
-                  onClick={() => navigate('/get-started')}
+                  onClick={() => navigate('/auth')}
                   className="gold-gradient text-primary-foreground text-lg px-8"
                 >
                   Create Your Diary

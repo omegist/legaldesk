@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, Scale, User, LogOut, LayoutDashboard, FolderLock, Users, Bell } from 'lucide-react';
+import { Menu, Scale, User, LogOut, LayoutDashboard, FolderLock, Users, Bell, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,9 +13,17 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-const navItems = [
+const lawyerNavItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'My Cases', href: '/cases', icon: Briefcase },
   { label: 'Legal Vault', href: '/vault', icon: FolderLock },
+  { label: 'Partners', href: '/partners', icon: Users },
+  { label: 'Reminders', href: '/settings/notifications', icon: Bell },
+];
+
+const partnerNavItems = [
+  { label: 'Workspace', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Shared Cases', href: '/cases', icon: Briefcase },
   { label: 'Partners', href: '/partners', icon: Users },
   { label: 'Reminders', href: '/settings/notifications', icon: Bell },
 ];
@@ -24,6 +32,7 @@ export function Header() {
   const { profile, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  const navItems = profile?.role === 'partner' ? partnerNavItems : lawyerNavItems;
 
   const handleLogout = async () => {
     await logout();

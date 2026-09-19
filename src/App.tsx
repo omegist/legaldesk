@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import CreateCase from "./pages/CreateCase";
 import CaseDetail from "./pages/CaseDetail";
+import Cases from "./pages/cases";
 import Vault from "./pages/Vault";
 import NotificationSettings from "./pages/NotificationSettings";
 import Pricing from "./pages/Pricing";
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/dashboard" element={protect(<Dashboard />)} />
+            <Route path="/cases" element={protect(<Cases />)} />
             <Route path="/cases/new" element={protect(<CreateCase />)} />
             <Route path="/cases/:id" element={protect(<CaseDetail />)} />
             <Route path="/vault" element={protect(<Vault />)} />

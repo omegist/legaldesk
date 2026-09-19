@@ -1,0 +1,19 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "legal-diary-storage",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-18",
+	"r2_buckets": [
+		{
+			"binding": "DOCUMENTS",
+			"bucket_name": "legal-diary-vault"
+		},
+		{
+			"bucket_name": "legal-diary-vault",
+			"binding": "legal_diary_vault"
+		}
+	],
+	"vars": {
+		"ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:8080,https://YOUR-APP-DOMAIN.example"
+	}
+}

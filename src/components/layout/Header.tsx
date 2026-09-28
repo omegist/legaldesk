@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, Scale, User, LogOut, LayoutDashboard, FolderLock, Users, Bell, Briefcase } from 'lucide-react';
+import { Menu, Scale, User, LogOut, LayoutDashboard, FolderLock, Users, Bell, Briefcase, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +19,7 @@ const lawyerNavItems = [
   { label: 'Legal Vault', href: '/vault', icon: FolderLock },
   { label: 'Partners', href: '/partners', icon: Users },
   { label: 'Reminders', href: '/settings/notifications', icon: Bell },
+  { label: 'Pricing', href: '/pricing', icon: CreditCard },
 ];
 
 const partnerNavItems = [
@@ -26,6 +27,7 @@ const partnerNavItems = [
   { label: 'Shared Cases', href: '/cases', icon: Briefcase },
   { label: 'Partners', href: '/partners', icon: Users },
   { label: 'Reminders', href: '/settings/notifications', icon: Bell },
+  { label: 'Pricing', href: '/pricing', icon: CreditCard },
 ];
 
 export function Header() {
@@ -44,7 +46,7 @@ export function Header() {
       <div className="container flex h-16 items-center justify-between">
         <Link to={isAuthenticated ? '/dashboard' : '/'} className="flex items-center gap-2">
           <Scale className="h-7 w-7 text-primary" />
-          <span className="font-serif text-xl font-semibold text-gold-gradient">Legal Diary</span>
+          <span className="font-serif text-xl font-semibold text-gold-gradient">VakilDesk</span>
         </Link>
 
         {isAuthenticated ? (

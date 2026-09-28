@@ -91,8 +91,13 @@ export default function Partners() {
         _query: q,
         ...(roleFilter === 'all' ? {} : { _role: roleFilter }),
       });
-      if (!error) setResults((data as DirectoryResult[]) ?? []);
-      if (error) setResults([]);
+      if (error) {
+        console.error('search_directory failed:', error);
+        toast({ title: 'Search failed', description: error.message, variant: 'destructive' });
+        setResults([]);
+      } else {
+        setResults((data as DirectoryResult[]) ?? []);
+      }
       setIsSearching(false);
     }, 300);
     return () => clearTimeout(t);

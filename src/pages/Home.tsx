@@ -137,7 +137,7 @@ export default function Home() {
                 Start Organizing Today
               </h2>
               <p className="text-muted-foreground max-w-xl mx-auto mb-8">
-                Join lawyers across India who trust Legal Diary for their case management needs.
+                Join lawyers across India who trust VakilDesk for their case management needs.
               </p>
               {!isAuthenticated && (
                 <Button
@@ -159,10 +159,10 @@ export default function Home() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Scale className="h-6 w-6 text-primary" />
-              <span className="font-serif text-lg font-semibold">Legal Diary</span>
+              <span className="font-serif text-lg font-semibold">VakilDesk</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} Legal Diary. Built for Indian Legal Professionals.
+              © {new Date().getFullYear()} VakilDesk. Built for Indian Legal Professionals.
             </p>
           </div>
         </div>

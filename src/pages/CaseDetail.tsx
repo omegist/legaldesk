@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, Plus, CalendarDays, Trash2, Users, X } from 'lucide-react';
+import { ArrowLeft, Loader2, Plus, CalendarDays, Trash2, Users, X, RefreshCw, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -58,6 +58,74 @@ export default function CaseDetail() {
   const [connectedPartners, setConnectedPartners] = useState<ConnectedPartner[]>([]);
   const [selectedPartnerId, setSelectedPartnerId] = useState('');
   const [canAddNotes, setCanAddNotes] = useState(false);
+  const [cnrInput, setCnrInput] = useState('');
+  const [isSavingCnr, setIsSavingCnr] = useState(false);
+  const [isSyncingCnr, setIsSyncingCnr] = useState(false);
+
+  const handleSaveCnr = async () => {
+    if (!diary || !cnrInput.trim()) return;
+    setIsSavingCnr(true);
+    const { data, error } = await supabase
+      .from('diaries')
+      .update({ cnr_number: cnrInput.trim(), cnr_sync_enabled: true })
+      .eq('id', diary.id)
+      .select()
+      .single();
+    setIsSavingCnr(false);
+    if (error) {
+      toast({ title: 'Could not save CNR', description: error.message, variant: 'destructive' });
+      return;
+    }
+    setDiary(data as Diary);
+    toast({ title: 'CNR saved', description: 'Click "Sync now" to pull the latest court data.' });
+  };
+
+  const handleToggleAutoSync = async () => {
+    if (!diary) return;
+    const { data, error } = await supabase
+      .from('diaries')
+      .update({ cnr_sync_enabled: !diary.cnr_sync_enabled })
+      .eq('id', diary.id)
+      .select()
+      .single();
+    if (!error) setDiary(data as Diary);
+  };
+
+    const handleSyncNow = async () => {
+    if (!diary) return;
+    setIsSyncingCnr(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-case-from-cnr`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ diaryId: diary.id }),
+        },
+      );
+      const result = await res.json();
+
+      if (!res.ok) {
+        toast({ title: 'Sync failed', description: result.error, variant: 'destructive' });
+        return;
+      }
+
+      toast({
+        title: 'Synced from eCourts',
+        description: `${result.timelineEntriesAdded} timeline entries added. Refreshing...`,
+      });
+      const { data: refreshed } = await supabase.from('diaries').select('*').eq('id', diary.id).maybeSingle();
+      if (refreshed) setDiary(refreshed as Diary);
+    } catch (err) {
+      console.error('Sync request failed:', err);
+      toast({ title: 'Could not reach the sync service', description: String(err), variant: 'destructive' });
+    } finally {
+      setIsSyncingCnr(false);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -72,6 +140,7 @@ export default function CaseDetail() {
     ]);
     setDiary((d as Diary) ?? null);
     setEntries((t as TimelineEntry[]) ?? []);
+    setCnrInput((d as Diary)?.cnr_number || '');
     setIsLoading(false);
   }, [id]);
 
@@ -281,7 +350,71 @@ export default function CaseDetail() {
               <Field label="Advocate" value={diary.opponent_advocate} />
             </AccordionContent>
           </AccordionItem>
-        </Accordion>
+            </Accordion>
+
+        {isOwner && (
+          <Card className="glass-effect border-primary/20 mb-8">
+            <CardHeader>
+              <CardTitle className="font-serif text-lg flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 text-primary" /> Court Sync (CNR)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground">CNR Number</label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="text"
+                    value={cnrInput}
+                    onChange={(e) => setCnrInput(e.target.value.toUpperCase())}
+                    placeholder="e.g. MHTH010040472025"
+                    className="flex-1 rounded-md bg-secondary/50 border border-border px-3 py-2 text-sm font-mono"
+                  />
+                  <Button size="sm" variant="outline" onClick={handleSaveCnr} disabled={isSavingCnr}>
+                    {isSavingCnr ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                  </Button>
+                </div>
+              </div>
+
+              {diary.cnr_number && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Auto-sync daily</span>
+                    <Button
+                      size="sm"
+                      variant={diary.cnr_sync_enabled ? 'default' : 'outline'}
+                      onClick={handleToggleAutoSync}
+                      className={diary.cnr_sync_enabled ? 'gold-gradient text-primary-foreground' : ''}
+                    >
+                      {diary.cnr_sync_enabled ? 'On' : 'Off'}
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-xs text-muted-foreground">
+                      {diary.cnr_last_synced_at
+                        ? `Last synced ${new Date(diary.cnr_last_synced_at).toLocaleString('en-IN')}`
+                        : 'Never synced yet'}
+                    </span>
+                    <Button size="sm" variant="outline" onClick={handleSyncNow} disabled={isSyncingCnr}>
+                      {isSyncingCnr ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sync now'}
+                    </Button>
+                  </div>
+                </>
+              )}
+                        </CardContent>
+          </Card>
+        )}
+
+        {isOwner && (
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/invoices/new?caseId=${diary.id}`)}
+            className="w-full mb-8"
+          >
+            <Receipt className="mr-2 h-4 w-4" /> Create Invoice for this case
+          </Button>
+        )}
 
         {isOwner && (
           <Card className="glass-effect border-primary/20 mb-8">

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, Scale, User, LogOut, LayoutDashboard, FolderLock, Users, Bell, Briefcase, CreditCard } from 'lucide-react';
+import { Menu, Scale, User, LogOut, LayoutDashboard, FolderLock, Users, Bell, Briefcase, CreditCard, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +20,7 @@ const lawyerNavItems = [
   { label: 'Partners', href: '/partners', icon: Users },
   { label: 'Reminders', href: '/settings/notifications', icon: Bell },
   { label: 'Pricing', href: '/pricing', icon: CreditCard },
+  { label: 'Invoices', href: '/invoices', icon: FileText },
 ];
 
 const partnerNavItems = [

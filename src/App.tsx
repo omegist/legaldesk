@@ -17,6 +17,8 @@ import NotificationSettings from "./pages/NotificationSettings";
 import Pricing from "./pages/Pricing";
 import Profile from "./pages/Profile";
 import Partners from "./pages/Partners";
+import CreateInvoice from "./pages/CreateInvoice";
+import Invoices from "./pages/Invoices";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +44,8 @@ const App = () => (
             <Route path="/partners" element={protect(<Partners />)} />
             <Route path="/settings/notifications" element={protect(<NotificationSettings />)} />
             <Route path="/profile" element={protect(<Profile />)} />
+            <Route path="/invoices" element={protect(<Invoices />)} />
+            <Route path="/invoices/new" element={protect(<CreateInvoice />)} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

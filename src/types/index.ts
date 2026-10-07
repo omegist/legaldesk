@@ -45,8 +45,11 @@ export interface Diary {
   purpose_of_hearing: string | null;
   status: CaseStatus;
   notes: string | null;
-  reminder_enabled: boolean;
+    reminder_enabled: boolean;
   reminder_hours_before: number;
+  cnr_number: string | null;
+  cnr_sync_enabled: boolean;
+  cnr_last_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }

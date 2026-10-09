@@ -1,5 +1,5 @@
 export type UserRole = 'lawyer' | 'partner' | 'admin';
-export type SubscriptionTier = 'free' | 'pro' | 'firm';
+export type SubscriptionTier = 'free' | 'pro' | 'chambers' | 'firm';
 export type CaseStatus = 'active' | 'disposed' | 'appealed' | 'adjourned';
 export type DocumentCategory =
   | 'client_evidence'
@@ -21,6 +21,7 @@ export interface Profile {
   experience_years: number | null;
   description: string | null;
   profile_photo_url: string | null;
+  firm_logo_url: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -22,6 +22,7 @@ interface LawyerInfo {
   phone: string | null;
   practice_area?: string | null;
   court_name?: string | null;
+  firm_logo_url?: string | null;
 }
 
 // Builds a clean, simple A4 invoice PDF — gold accent to match your brand,
@@ -33,6 +34,16 @@ export function generateInvoicePdf(invoice: InvoiceData, lawyer: LawyerInfo): Bl
   const gray: [number, number, number] = [120, 120, 120];
   const marginX = 20;
   let y = 20;
+
+  // Firm logo (if provided)
+  if (lawyer.firm_logo_url) {
+    try {
+      doc.addImage(lawyer.firm_logo_url, 'PNG', marginX, y, 30, 12, undefined, 'FAST');
+      y += 16;
+    } catch {
+      // logo failed to load — fall through to text header
+    }
+  }
 
   // Header
   doc.setFont('helvetica', 'bold');

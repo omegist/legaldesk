@@ -22,7 +22,7 @@ import { supabase } from '@/integrations/supabase/client';
 export default function CreateCase() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { canCreateCase, limit, activeCases, tierLabel } = useSubscriptionLimits();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -57,6 +57,7 @@ export default function CreateCase() {
       .from('diaries')
       .insert({
         lawyer_id: user.id,
+        firm_id: profile?.firm_id ?? null,
         matter_date: form.matter_date,
         hearing_time: form.hearing_time || null,
         court_name: form.court_name,

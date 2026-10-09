@@ -6,6 +6,7 @@ import type { SubscriptionTier } from '@/types';
 export const TIER_LIMITS: Record<SubscriptionTier, { activeCases: number | null; label: string }> = {
   free: { activeCases: 5, label: 'Free' },
   pro: { activeCases: null, label: 'Pro' },
+  chambers: { activeCases: null, label: 'Chambers' },
   firm: { activeCases: null, label: 'Firm' },
 };
 
@@ -27,7 +28,6 @@ export function useSubscriptionLimits() {
     const { count } = await supabase
       .from('diaries')
       .select('id', { count: 'exact', head: true })
-      .eq('lawyer_id', user.id)
       .eq('status', 'active');
     setActiveCases(count ?? 0);
     setIsLoading(false);

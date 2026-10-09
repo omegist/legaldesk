@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useOfflineCases } from '@/hooks/useOfflineCases';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Briefcase, Gavel, ClipboardList, Loader2, Clock, MapPin, UserPlus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Briefcase, Gavel, ClipboardList, Loader2, Clock, MapPin, UserPlus, ChevronLeft, ChevronRight, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +35,7 @@ function addDays(date: Date, amount: number) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
+  const { cases: offlineCases, isOffline } = useOfflineCases();
   const [cases, setCases] = useState<Diary[]>([]);
   const [pendingInvites, setPendingInvites] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,6 +70,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user) return;
     const load = async () => {
+      if (!navigator.onLine) { setCases(offlineCases); setIsLoading(false); return; }
       const [{ data: diaries }, { count }] = await Promise.all([
         supabase.from('diaries').select('*').order('matter_date', { ascending: true }),
         supabase
@@ -110,6 +113,13 @@ export default function Dashboard() {
             })}
           </p>
         </div>
+
+        {isOffline && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+            <WifiOff className="h-4 w-4 shrink-0" />
+            You're offline — showing cached data.
+          </div>
+        )}
 
         {pendingInvites > 0 && (
           <button

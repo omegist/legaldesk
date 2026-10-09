@@ -59,9 +59,14 @@ Deno.serve(async (req) => {
     .eq('id', row.id);
 
   if (newStatus === 'active') {
-    await supabase.from('profiles').update({ subscription_tier: row.tier }).eq('id', row.user_id);
+    const update: Record<string, unknown> = { subscription_tier: row.tier };
+    // Chambers/Firm owner becomes their own firm — firm_id = their own user id
+    if (row.tier === 'chambers' || row.tier === 'firm') {
+      update.firm_id = row.user_id;
+    }
+    await supabase.from('profiles').update(update).eq('id', row.user_id);
   } else if (['cancelled', 'expired', 'completed'].includes(newStatus)) {
-    await supabase.from('profiles').update({ subscription_tier: 'free' }).eq('id', row.user_id);
+    await supabase.from('profiles').update({ subscription_tier: 'free', firm_id: null }).eq('id', row.user_id);
   }
 
   return new Response('ok', { status: 200 });

@@ -32,6 +32,8 @@ interface Invoice {
   status: string;
   issue_date: string;
   due_date: string | null;
+  lawyer_id: string;
+  profiles?: { name: string } | null;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -46,17 +48,21 @@ export default function Invoices() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, profile } = useAuth();
+  const isFirmOwner = !!profile?.firm_id && profile.firm_id === user?.id;
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
+
   const load = async () => {
     if (!user) return;
-    const { data } = await supabase
+    // Firm owners see all invoices across the firm (RLS allows this)
+    const query = supabase
       .from('invoices')
-      .select('*')
-      .eq('lawyer_id', user.id)
+      .select('*, profiles:lawyer_id(name)')
       .order('created_at', { ascending: false });
+    if (!isFirmOwner) query.eq('lawyer_id', user.id);
+    const { data } = await query;
     setInvoices((data as Invoice[]) ?? []);
     setIsLoading(false);
   };
@@ -88,7 +94,7 @@ export default function Invoices() {
         due_date: inv.due_date,
         notes: null,
       },
-      { name: profile.name, email: profile.email, phone: profile.phone },
+      { name: profile.name, email: profile.email, phone: profile.phone, firm_logo_url: profile.firm_logo_url },
     );
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -150,6 +156,7 @@ export default function Invoices() {
                     <p className="text-xs text-muted-foreground mt-1">
                       Issued {new Date(inv.issue_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                       {inv.due_date && ` · Due ${new Date(inv.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+                      {isFirmOwner && inv.profiles?.name && ` · By ${inv.profiles.name}`}
                     </p>
                   </div>
                   <div className="text-right shrink-0">

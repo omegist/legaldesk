@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, Scale, User, LogOut, LayoutDashboard, FolderLock, Users, Bell, Briefcase, CreditCard, FileText } from 'lucide-react';
+import { Menu, Scale, User, LogOut, LayoutDashboard, FolderLock, Users, Bell, Briefcase, CreditCard, FileText, IndianRupee, BookOpen, Building2, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
@@ -21,6 +21,8 @@ const lawyerNavItems = [
   { label: 'Reminders', href: '/settings/notifications', icon: Bell },
   { label: 'Pricing', href: '/pricing', icon: CreditCard },
   { label: 'Invoices', href: '/invoices', icon: FileText },
+  { label: 'Fee Ledger', href: '/fee-ledger', icon: IndianRupee },
+  { label: 'Templates', href: '/templates', icon: BookOpen },
 ];
 
 const partnerNavItems = [
@@ -35,7 +37,14 @@ export function Header() {
   const { profile, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
-  const navItems = profile?.role === 'partner' ? partnerNavItems : lawyerNavItems;
+
+  const isTeamTier = profile?.subscription_tier === 'chambers' || profile?.subscription_tier === 'firm';
+  const isMember = !!profile?.firm_id && profile.firm_id !== profile.id;
+
+  const baseItems = profile?.role === 'partner' ? partnerNavItems : lawyerNavItems;
+  const navItems = (isTeamTier || isMember)
+    ? [...baseItems, { label: 'Team', href: '/team', icon: Building2 }, { label: 'Calendar', href: '/calendar', icon: CalendarDays }]
+    : baseItems;
 
   const handleLogout = async () => {
     await logout();

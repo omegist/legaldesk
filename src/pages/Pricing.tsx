@@ -60,14 +60,28 @@ const PLANS: Plan[] = [
     highlighted: true,
   },
   {
+    tier: 'chambers',
+    name: 'Chambers',
+    price: '₹999',
+    cadence: '/month',
+    description: 'For a small chambers with 2–3 lawyers.',
+    features: [
+      'Everything in Pro',
+      'Up to 3 user logins',
+      'Shared case diary',
+      'CNR auto-sync for all users',
+      'Priority support',
+    ],
+  },
+  {
     tier: 'firm',
     name: 'Firm',
     price: '₹2,499',
     cadence: '/month',
-    description: 'For chambers with multiple lawyers.',
+    description: 'For large chambers with multiple lawyers.',
     features: [
-      'Everything in Pro',
-      'Multi-user firm logins',
+      'Everything in Chambers',
+      'Unlimited user logins',
       'Shared firm calendar',
       'Centralized billing',
       'Firm branding',
@@ -156,7 +170,7 @@ export default function Pricing() {
       key: order.key_id,
       subscription_id: order.subscription_id,
       name: 'VakilDesk',
-      description: `${tier === 'pro' ? 'Pro' : 'Firm'} plan — billed monthly, cancel anytime`,
+      description: `${{ pro: 'Pro', chambers: 'Chambers', firm: 'Firm' }[tier] ?? tier} plan — billed monthly, cancel anytime`,
       theme: { color: '#c9a24b' },
       prefill: { email: profile?.email, contact: profile?.phone ?? undefined },
       handler: async () => {
@@ -219,7 +233,7 @@ export default function Pricing() {
           <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 max-w-2xl mx-auto">
             <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500 mt-0.5" />
             <p className="text-sm">
-              Your {currentTier === 'pro' ? 'Pro' : 'Firm'} plan is set to cancel
+              Your {{ pro: 'Pro', chambers: 'Chambers', firm: 'Firm' }[currentTier] ?? currentTier} plan is set to cancel
               {subInfo.current_period_end
                 ? ` on ${new Date(subInfo.current_period_end).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
                 : ' at the end of the current billing period'}
@@ -228,7 +242,7 @@ export default function Pricing() {
           </div>
         )}
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {PLANS.map((plan) => {
             const isCurrent = plan.tier === currentTier;
             const canCancel = isCurrent && plan.tier !== 'free' && !subInfo?.cancel_at_period_end;

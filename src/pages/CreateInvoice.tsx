@@ -127,7 +127,7 @@ export default function CreateInvoice() {
         due_date: form.due_date || null,
         notes: form.notes || null,
       },
-      { name: profile.name, email: profile.email, phone: profile.phone },
+      { name: profile.name, email: profile.email, phone: profile.phone, firm_logo_url: profile.firm_logo_url },
     );
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');

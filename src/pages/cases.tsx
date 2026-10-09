@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Loader2, Gavel, MapPin, Clock, Plus } from 'lucide-react';
+import { Search, Loader2, Gavel, MapPin, Clock, Plus, WifiOff } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,9 +13,8 @@ import {
 } from '@/components/ui/select';
 import { Header } from '@/components/layout/Header';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-import type { Diary } from '@/types';
+import { useOfflineCases } from '@/hooks/useOfflineCases';
 
 const STATUS_STYLES: Record<string, string> = {
   active: 'border-emerald-500/40 text-emerald-500',
@@ -24,29 +23,12 @@ const STATUS_STYLES: Record<string, string> = {
   adjourned: 'border-sky-500/40 text-sky-500',
 };
 
-// This is the page that was missing: Dashboard only ever shows the current
-// calendar week's hearings, so a case scheduled outside that window had
-// nowhere to be found again after creation. This page lists every case,
-// regardless of date, with search and a status filter.
 export default function Cases() {
   const navigate = useNavigate();
-  const { user, profile } = useAuth();
-  const [cases, setCases] = useState<Diary[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { profile } = useAuth();
+  const { cases, isLoading, isOffline } = useOfflineCases();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-
-  useEffect(() => {
-    if (!user) return;
-    supabase
-      .from('diaries')
-      .select('*')
-      .order('matter_date', { ascending: false })
-      .then(({ data }) => {
-        setCases((data as Diary[]) ?? []);
-        setIsLoading(false);
-      });
-  }, [user]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -84,6 +66,13 @@ export default function Cases() {
             </Button>
           )}
         </div>
+
+        {isOffline && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+            <WifiOff className="h-4 w-4 shrink-0" />
+            You're offline — showing cached cases. Changes won't be saved until you reconnect.
+          </div>
+        )}
 
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">

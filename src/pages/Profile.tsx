@@ -28,6 +28,7 @@ export default function Profile() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   const AVATAR_BUCKET = 'avatars';
 
@@ -102,6 +103,36 @@ export default function Profile() {
     }
     setIsLoading(false);
   }, [profile, user]);
+
+  const isFirmOwner = !!profile?.firm_id && profile.firm_id === user?.id;
+
+  const handleLogoSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Please choose an image file', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: 'Logo too large', description: 'Please choose one under 2MB.', variant: 'destructive' });
+      return;
+    }
+    setIsUploadingLogo(true);
+    const ext = file.name.split('.').pop();
+    const path = `${user.id}/firm-logo.${ext}`;
+    const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(path, file, { upsert: true });
+    if (uploadError) {
+      setIsUploadingLogo(false);
+      toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
+      return;
+    }
+    const { data: urlData } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+    const logoUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+    await supabase.from('profiles').update({ firm_logo_url: logoUrl }).eq('id', user.id);
+    setIsUploadingLogo(false);
+    await refreshProfile();
+    toast({ title: 'Firm logo updated' });
+  };
 
   const handleSave = async () => {
     if (!user || !profile) return;
@@ -194,6 +225,30 @@ export default function Profile() {
             </div>
           </div>
         </div>
+
+        {isFirmOwner && (
+          <Card className="glass-effect border-primary/20">
+            <CardHeader>
+              <CardTitle className="font-serif text-lg">Firm branding</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">Your firm logo appears on all generated invoices and PDF templates.</p>
+              <div className="flex items-center gap-4">
+                {profile.firm_logo_url && (
+                  <img src={profile.firm_logo_url} alt="Firm logo" className="h-14 w-auto rounded border border-border/60 object-contain bg-white p-1" />
+                )}
+                <label
+                  htmlFor="logo-upload"
+                  className="cursor-pointer inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-secondary/50"
+                >
+                  {isUploadingLogo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                  {profile.firm_logo_url ? 'Change logo' : 'Upload logo'}
+                </label>
+                <input id="logo-upload" type="file" accept="image/*" className="hidden" onChange={handleLogoSelected} disabled={isUploadingLogo} />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="glass-effect border-primary/20">
           <CardHeader>

@@ -7,6 +7,7 @@ const RAZORPAY_KEY_SECRET = Deno.env.get('RAZORPAY_KEY_SECRET')!;
 
 const PLAN_IDS: Record<string, string | undefined> = {
   pro: Deno.env.get('RAZORPAY_PLAN_PRO'),
+  chambers: Deno.env.get('RAZORPAY_PLAN_CHAMBERS'),
   firm: Deno.env.get('RAZORPAY_PLAN_FIRM'),
 };
 
@@ -31,7 +32,7 @@ Deno.serve(async (req) => {
     const user = userData.user;
 
     const { tier } = await req.json();
-    if (tier !== 'pro' && tier !== 'firm') return json({ error: 'Invalid tier' }, 400);
+    if (!['pro', 'chambers', 'firm'].includes(tier)) return json({ error: 'Invalid tier' }, 400);
 
     const planId = PLAN_IDS[tier];
     if (!planId) return json({ error: `No Razorpay plan configured for tier "${tier}"` }, 500);

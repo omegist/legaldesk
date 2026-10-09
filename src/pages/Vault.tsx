@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Search, Upload, Loader2, FileText, Download, Trash2, FolderLock } from 'lucide-react';
+import { Search, Upload, Loader2, FileText, Download, Trash2, FolderLock, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { deleteDocumentFromR2, openDocumentFromR2, uploadDocumentToR2 } from '@/lib/r2';
+import { pickImageFromCamera, isNative } from '@/lib/native';
 import { DOCUMENT_CATEGORIES, type CaseDocument, type DocumentCategory, type Diary } from '@/types';
 
 export default function Vault() {
@@ -33,6 +34,19 @@ export default function Vault() {
   const [diaryId, setDiaryId] = useState<string>('none');
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+
+  const handleCameraScan = async () => {
+    setIsScanning(true);
+    try {
+      const file = await pickImageFromCamera();
+      if (file) await handleUpload(file);
+    } catch {
+      toast({ title: 'Camera scan cancelled or failed', variant: 'destructive' });
+    } finally {
+      setIsScanning(false);
+    }
+  };
 
   const load = useCallback(async () => {
     const [{ data: d }, { data: c }] = await Promise.all([
@@ -213,7 +227,7 @@ export default function Vault() {
             />
             <Button
               onClick={() => fileInput.current?.click()}
-              disabled={isUploading}
+              disabled={isUploading || isScanning}
               className="w-full gold-gradient text-primary-foreground"
             >
               {isUploading ? (
@@ -224,6 +238,21 @@ export default function Vault() {
                 </>
               )}
             </Button>
+            {isNative && (
+              <Button
+                variant="outline"
+                onClick={handleCameraScan}
+                disabled={isUploading || isScanning}
+                className="w-full"
+              >
+                {isScanning ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Camera className="mr-2 h-4 w-4" />
+                )}
+                Scan with Camera
+              </Button>
+            )}
           </CardContent>
         </Card>
 

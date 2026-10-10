@@ -92,21 +92,21 @@ export default function NotificationSettings() {
                 <ChannelRow
                   icon={Mail}
                   title="Email reminders"
-                  subtitle="Recommended Â· powered by Resend"
+                  subtitle="Sent from reminders@vakildesk.app the evening before"
                   checked={settings.email_enabled}
                   onCheckedChange={(v) => setSettings((s) => ({ ...s, email_enabled: v }))}
                 />
                 <ChannelRow
                   icon={MessageCircle}
                   title="WhatsApp reminders"
-                  subtitle="Sending integration coming soon"
+                  subtitle="Coming soon — save your preference now"
                   checked={settings.whatsapp_enabled}
                   onCheckedChange={(v) => setSettings((s) => ({ ...s, whatsapp_enabled: v }))}
                 />
                 <ChannelRow
                   icon={Smartphone}
                   title="SMS reminders"
-                  subtitle="Sending integration coming soon"
+                  subtitle="Coming soon — save your preference now"
                   checked={settings.sms_enabled}
                   onCheckedChange={(v) => setSettings((s) => ({ ...s, sms_enabled: v }))}
                 />
@@ -114,7 +114,7 @@ export default function NotificationSettings() {
             </Card>
 
             <p className="text-xs text-muted-foreground px-1">
-              WhatsApp and SMS preferences are saved now; delivery will be enabled in a future update.
+              WhatsApp and SMS delivery will be enabled in a future update. Your preferences are saved.
             </p>
 
             <Card className="glass-effect border-primary/20">

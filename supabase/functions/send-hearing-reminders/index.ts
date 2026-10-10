@@ -5,6 +5,53 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
 
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
+const FROM_EMAIL = 'VakilDesk <reminders@vakildesks.in>';
+
+// ── Resend ────────────────────────────────────────────────────────────────────
+async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from: FROM_EMAIL, to, subject, html }),
+  });
+  if (!res.ok) {
+    console.error('Resend error:', await res.text());
+  }
+  return res.ok;
+}
+
+function emailHtml(lawyerName: string, hearings: { party_names: string; court: string; time: string }[]): string {
+  const rows = hearings
+    .map(
+      (h) => `
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #2a2a2a;">
+          <strong style="color:#c9a24b;">${h.party_names}</strong><br/>
+          <span style="color:#888;font-size:13px;">${h.court}${h.time ? ' · ' + h.time : ''}</span>
+        </td>
+      </tr>`,
+    )
+    .join('');
+
+  return `
+    <div style="background:#0f0f0f;color:#e5e5e5;font-family:Georgia,serif;max-width:560px;margin:0 auto;padding:32px 24px;border-radius:12px;">
+      <h2 style="color:#c9a24b;margin:0 0 4px;">VakilDesk</h2>
+      <p style="color:#888;font-size:13px;margin:0 0 24px;">Hearing Reminder</p>
+      <p style="margin:0 0 16px;">Dear <strong>${lawyerName}</strong>,</p>
+      <p style="margin:0 0 20px;color:#ccc;">You have the following hearing(s) scheduled for <strong style="color:#fff;">tomorrow</strong>:</p>
+      <table style="width:100%;border-collapse:collapse;">${rows}</table>
+      <p style="margin:24px 0 0;font-size:12px;color:#555;">
+        You're receiving this because you enabled email reminders in VakilDesk.<br/>
+        Manage your preferences at <a href="https://vakildesks.in/settings/notifications" style="color:#c9a24b;">vakildesks.in</a>
+      </p>
+    </div>`;
+}
+
+// ── FCM ───────────────────────────────────────────────────────────────────────
 async function getFirebaseAccessToken(serviceAccount: Record<string, string>): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'RS256', typ: 'JWT' };
@@ -22,7 +69,6 @@ async function getFirebaseAccessToken(serviceAccount: Record<string, string>): P
 
   const signingInput = `${encode(header)}.${encode(payload)}`;
 
-  // Import the private key
   const pemContents = serviceAccount.private_key
     .replace(/-----BEGIN PRIVATE KEY-----/, '')
     .replace(/-----END PRIVATE KEY-----/, '')
@@ -78,27 +124,27 @@ async function sendFCM(token: string, title: string, body: string, accessToken: 
   return res.ok;
 }
 
+// ── Main ──────────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
-  // Allow manual trigger via POST and scheduled trigger via GET
   if (req.method !== 'POST' && req.method !== 'GET') {
     return new Response('Method not allowed', { status: 405 });
   }
 
-  const serviceAccount = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!);
-  const projectId = Deno.env.get('FIREBASE_PROJECT_ID')!;
-
-  // Get tomorrow's date in IST (UTC+5:30)
+  // Tomorrow in IST (UTC+5:30)
   const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istNow = new Date(now.getTime() + istOffset);
+  const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
   const tomorrow = new Date(istNow);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowISO = tomorrow.toISOString().slice(0, 10);
 
-  // Fetch all hearings scheduled for tomorrow with lawyer FCM tokens
+  // Fetch hearings with lawyer profile + notification settings
   const { data: hearings, error } = await supabase
     .from('diaries')
-    .select('party_names, court_name, court_number, hearing_time, lawyer_id, profiles(fcm_token, name)')
+    .select(`
+      party_names, court_name, court_number, hearing_time, lawyer_id,
+      profiles!inner(name, email, fcm_token),
+      notification_settings!left(email_enabled, reminder_hours)
+    `)
     .eq('matter_date', tomorrowISO)
     .eq('status', 'active');
 
@@ -110,25 +156,69 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ sent: 0, message: 'No hearings tomorrow' }), { status: 200 });
   }
 
-  const accessToken = await getFirebaseAccessToken(serviceAccount);
-
-  let sent = 0;
-  for (const hearing of hearings) {
-    const profile = Array.isArray(hearing.profiles) ? hearing.profiles[0] : hearing.profiles;
-    const fcmToken = profile?.fcm_token;
-    if (!fcmToken) continue;
-
-    const time = hearing.hearing_time ? hearing.hearing_time.slice(0, 5) : '';
-    const court = hearing.court_number
-      ? `${hearing.court_name} · Court ${hearing.court_number}`
-      : hearing.court_name;
-
-    const title = `Hearing Tomorrow${time ? ` at ${time}` : ''}`;
-    const body = `${hearing.party_names} — ${court}`;
-
-    const ok = await sendFCM(fcmToken, title, body, accessToken, projectId);
-    if (ok) sent++;
+  // Group hearings by lawyer_id so we send one email per lawyer (not one per case)
+  const byLawyer = new Map<string, typeof hearings>();
+  for (const h of hearings) {
+    const existing = byLawyer.get(h.lawyer_id) ?? [];
+    existing.push(h);
+    byLawyer.set(h.lawyer_id, existing);
   }
 
-  return new Response(JSON.stringify({ sent, total: hearings.length }), { status: 200 });
+  const serviceAccount = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!);
+  const projectId = Deno.env.get('FIREBASE_PROJECT_ID')!;
+  const fcmAccessToken = await getFirebaseAccessToken(serviceAccount);
+
+  let emailsSent = 0;
+  let pushSent = 0;
+
+  for (const [, lawyerHearings] of byLawyer) {
+    const first = lawyerHearings[0];
+    const profile = Array.isArray(first.profiles) ? first.profiles[0] : first.profiles;
+    const notifSettings = Array.isArray(first.notification_settings)
+      ? first.notification_settings[0]
+      : first.notification_settings;
+
+    const emailEnabled = notifSettings?.email_enabled ?? true; // default on
+    const fcmToken = profile?.fcm_token;
+
+    // ── Email via Resend ──
+    if (emailEnabled && profile?.email) {
+      const hearingList = lawyerHearings.map((h) => ({
+        party_names: h.party_names,
+        court: h.court_number ? `${h.court_name} · Court ${h.court_number}` : h.court_name,
+        time: h.hearing_time ? h.hearing_time.slice(0, 5) : '',
+      }));
+
+      const subject = lawyerHearings.length === 1
+        ? `Hearing tomorrow: ${lawyerHearings[0].party_names}`
+        : `${lawyerHearings.length} hearings tomorrow — VakilDesk`;
+
+      const ok = await sendEmail(
+        profile.email,
+        subject,
+        emailHtml(profile.name, hearingList),
+      );
+      if (ok) emailsSent++;
+    }
+
+    // ── FCM push notification ──
+    if (fcmToken) {
+      const time = first.hearing_time ? first.hearing_time.slice(0, 5) : '';
+      const court = first.court_number
+        ? `${first.court_name} · Court ${first.court_number}`
+        : first.court_name;
+      const title = `Hearing Tomorrow${time ? ` at ${time}` : ''}`;
+      const body = lawyerHearings.length === 1
+        ? `${first.party_names} — ${court}`
+        : `${lawyerHearings.length} hearings scheduled`;
+
+      const ok = await sendFCM(fcmToken, title, body, fcmAccessToken, projectId);
+      if (ok) pushSent++;
+    }
+  }
+
+  return new Response(
+    JSON.stringify({ emailsSent, pushSent, lawyers: byLawyer.size }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
 });

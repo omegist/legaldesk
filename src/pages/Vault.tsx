@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Search, Upload, Loader2, FileText, Download, Trash2, FolderLock, Camera } from 'lucide-react';
+import { Search, Upload, Loader2, FileText, Download, Trash2, FolderLock, Camera, ScanLine, Lock, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,9 @@ import { cn } from '@/lib/utils';
 import { deleteDocumentFromR2, openDocumentFromR2, uploadDocumentToR2 } from '@/lib/r2';
 import { pickImageFromCamera, isNative } from '@/lib/native';
 import { DOCUMENT_CATEGORIES, type CaseDocument, type DocumentCategory, type Diary } from '@/types';
+import { DocumentScanner } from '@/components/vault/DocumentScanner';
+import { VaultAuthGate } from '@/components/vault/VaultAuthGate';
+import { useVaultAuth } from '@/hooks/useVaultAuth';
 
 export default function Vault() {
   const { user } = useAuth();
@@ -36,6 +39,16 @@ export default function Vault() {
   const [isUploading, setIsUploading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
 
+  // ── Multi-page web scanner ──────────────────────────────────────────────────
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  // ── Vault biometric / PIN authentication ────────────────────────────────────
+  const vaultAuth = useVaultAuth();
+  const [authGateOpen, setAuthGateOpen] = useState(false);
+  const [authGateMode, setAuthGateMode] = useState<'verify' | 'register'>('verify');
+  // Doc pending auth — stored so we can open it after successful verification
+  const pendingDoc = useRef<CaseDocument | null>(null);
+
   const handleCameraScan = async () => {
     setIsScanning(true);
     try {
@@ -46,6 +59,11 @@ export default function Vault() {
     } finally {
       setIsScanning(false);
     }
+  };
+
+  /** Called by the web DocumentScanner component with the merged PDF. */
+  const handleScanComplete = (file: File) => {
+    handleUpload(file);
   };
 
   const load = useCallback(async () => {
@@ -99,6 +117,30 @@ export default function Vault() {
   };
 
   const openDoc = async (doc: CaseDocument) => {
+    // Protected documents (client_evidence, filed_plaints) require vault authentication
+    const isProtected = (doc as CaseDocument & { security_level?: string }).security_level === 'protected'
+      || doc.category === 'client_evidence'
+      || doc.category === 'filed_plaints';
+
+    if (isProtected && !vaultAuth.isUnlocked) {
+      // No credentials set up yet — prompt user to register
+      if (!vaultAuth.hasCredentials && !vaultAuth.hasPin) {
+        pendingDoc.current = doc;
+        setAuthGateMode('register');
+        setAuthGateOpen(true);
+        return;
+      }
+      // Try silent biometric first; if it fails, show the gate dialog
+      pendingDoc.current = doc;
+      const unlocked = await vaultAuth.unlockVault();
+      if (!unlocked) {
+        setAuthGateMode('verify');
+        setAuthGateOpen(true);
+        return;
+      }
+    }
+
+    // Open the document (either not protected, or already unlocked)
     try {
       await openDocumentFromR2(doc.storage_key);
     } catch (error) {
@@ -107,7 +149,24 @@ export default function Vault() {
         description: error instanceof Error ? error.message : undefined,
         variant: 'destructive',
       });
-      return;
+    }
+  };
+
+  /** Called by VaultAuthGate when the user successfully authenticates. */
+  const handleVaultAuthenticated = async () => {
+    setAuthGateOpen(false);
+    const doc = pendingDoc.current;
+    pendingDoc.current = null;
+    if (doc) {
+      try {
+        await openDocumentFromR2(doc.storage_key);
+      } catch (error) {
+        toast({
+          title: 'Could not open file',
+          description: error instanceof Error ? error.message : undefined,
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -238,6 +297,19 @@ export default function Vault() {
                 </>
               )}
             </Button>
+
+            {/* Multi-page web scanner — available on all plans, all platforms */}
+            <Button
+              variant="outline"
+              onClick={() => setScannerOpen(true)}
+              disabled={isUploading || isScanning}
+              className="w-full border-primary/40 hover:border-primary"
+            >
+              <ScanLine className="mr-2 h-4 w-4 text-primary" />
+              Scan Multi-Page Document
+            </Button>
+
+            {/* Native single-shot camera (Capacitor only) */}
             {isNative && (
               <Button
                 variant="outline"
@@ -250,11 +322,23 @@ export default function Vault() {
                 ) : (
                   <Camera className="mr-2 h-4 w-4" />
                 )}
-                Scan with Camera
+                Quick Scan (1 page)
               </Button>
+            )}
+
+            {/* Vault security setup shortcut */}
+            {!vaultAuth.hasCredentials && !vaultAuth.hasPin && (
+              <button
+                onClick={() => { setAuthGateMode('register'); setAuthGateOpen(true); }}
+                className="flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors"
+              >
+                <Lock className="h-3 w-3" />
+                Set up biometric protection for sensitive documents
+              </button>
             )}
           </CardContent>
         </Card>
+
 
         {isLoading ? (
           <div className="flex justify-center py-12">
@@ -264,51 +348,81 @@ export default function Vault() {
           <p className="text-center text-sm text-muted-foreground py-12">No documents found.</p>
         ) : (
           <ul className="space-y-3">
-            {visible.map((doc) => (
-              <li key={doc.id}>
-                <Card className="border-border/60 bg-card/70">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex gap-3 min-w-0">
-                        <FileText className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">{doc.file_name}</p>
-                          <Badge variant="outline" className="mt-1 text-[10px] border-primary/30">
-                            {DOCUMENT_CATEGORIES.find((c) => c.value === doc.category)?.label}
-                          </Badge>
+            {visible.map((doc) => {
+              const isProtected = doc.category === 'client_evidence' || doc.category === 'filed_plaints';
+              return (
+                <li key={doc.id}>
+                  <Card className="border-border/60 bg-card/70">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex gap-3 min-w-0">
+                          <FileText className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{doc.file_name}</p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <Badge variant="outline" className="text-[10px] border-primary/30">
+                                {DOCUMENT_CATEGORIES.find((c) => c.value === doc.category)?.label}
+                              </Badge>
+                              {isProtected && (
+                                <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 gap-1">
+                                  <Lock className="h-2.5 w-2.5" /> Protected
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button variant="ghost" size="icon" onClick={() => openDoc(doc)} aria-label="Open">
+                            {isProtected && !vaultAuth.isUnlocked
+                              ? <Lock className="h-4 w-4 text-amber-400" />
+                              : <Download className="h-4 w-4" />}
+                          </Button>
+                          {doc.owner_id === user?.id && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="hover:text-destructive"
+                              onClick={() => removeDoc(doc)}
+                              aria-label="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
-                      <div className="flex gap-1 shrink-0">
-                        <Button variant="ghost" size="icon" onClick={() => openDoc(doc)} aria-label="Open">
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        {doc.owner_id === user?.id && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="hover:text-destructive"
-                            onClick={() => removeDoc(doc)}
-                            aria-label="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    <Textarea
-                      rows={2}
-                      placeholder="Quick strategy note…"
-                      defaultValue={doc.notes ?? ''}
-                      onBlur={(e) => saveNote(doc, e.target.value)}
-                      className="bg-secondary/40 text-sm"
-                    />
-                  </CardContent>
-                </Card>
-              </li>
-            ))}
+                      <Textarea
+                        rows={2}
+                        placeholder="Quick strategy note…"
+                        defaultValue={doc.notes ?? ''}
+                        onBlur={(e) => saveNote(doc, e.target.value)}
+                        className="bg-secondary/40 text-sm"
+                      />
+                    </CardContent>
+                  </Card>
+                </li>
+              );
+            })}
           </ul>
         )}
       </main>
+
+      {/* ── Multi-page document scanner overlay ── */}
+      <DocumentScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScanComplete={handleScanComplete}
+        onError={(msg) => toast({ title: 'Scanner error', description: msg, variant: 'destructive' })}
+      />
+
+      {/* ── Vault authentication gate (biometric / PIN) ── */}
+      <VaultAuthGate
+        open={authGateOpen}
+        mode={authGateMode}
+        auth={vaultAuth}
+        onAuthenticated={handleVaultAuthenticated}
+        onCancel={() => { setAuthGateOpen(false); pendingDoc.current = null; }}
+      />
     </div>
   );
 }
+

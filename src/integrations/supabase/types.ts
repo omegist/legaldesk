@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_portal_tokens: {
+        Row: {
+          created_at: string
+          diary_id: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          lawyer_id: string
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          diary_id: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          lawyer_id: string
+          token?: string
+        }
+        Update: {
+          created_at?: string
+          diary_id?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          lawyer_id?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_portal_tokens_diary_id_fkey"
+            columns: ["diary_id"]
+            isOneToOne: false
+            referencedRelation: "diaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_portal_tokens_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       diaries: {
         Row: {
           case_number: string
@@ -154,6 +199,7 @@ export type Database = {
           created_by: string
           diary_id: string
           entry_date: string
+          entry_type: string | null
           id: string
         }
         Insert: {
@@ -162,6 +208,7 @@ export type Database = {
           created_by: string
           diary_id: string
           entry_date?: string
+          entry_type?: string | null
           id?: string
         }
         Update: {
@@ -170,6 +217,7 @@ export type Database = {
           created_by?: string
           diary_id?: string
           entry_date?: string
+          entry_type?: string | null
           id?: string
         }
         Relationships: [
@@ -231,6 +279,99 @@ export type Database = {
             columns: ["diary_id"]
             isOneToOne: false
             referencedRelation: "diaries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fee_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          diary_id: string
+          id: string
+          lawyer_id: string
+          mode: string
+          note: string | null
+          payment_date: string
+          payment_type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          diary_id: string
+          id?: string
+          lawyer_id: string
+          mode?: string
+          note?: string | null
+          payment_date?: string
+          payment_type?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          diary_id?: string
+          id?: string
+          lawyer_id?: string
+          mode?: string
+          note?: string | null
+          payment_date?: string
+          payment_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fee_payments_diary_id_fkey"
+            columns: ["diary_id"]
+            isOneToOne: false
+            referencedRelation: "diaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fee_payments_lawyer_id_fkey"
+            columns: ["lawyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      firm_invites: {
+        Row: {
+          created_at: string
+          email: string
+          firm_id: string
+          id: string
+          invited_by: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          firm_id: string
+          id?: string
+          invited_by: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          firm_id?: string
+          id?: string
+          invited_by?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_invites_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "firm_invites_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -444,7 +585,9 @@ export type Database = {
           description: string | null
           email: string
           experience_years: number | null
+          fcm_token: string | null
           firm_id: string | null
+          firm_logo_url: string | null
           id: string
           name: string
           phone: string | null
@@ -461,7 +604,9 @@ export type Database = {
           description?: string | null
           email?: string
           experience_years?: number | null
+          fcm_token?: string | null
           firm_id?: string | null
+          firm_logo_url?: string | null
           id: string
           name?: string
           phone?: string | null
@@ -478,7 +623,9 @@ export type Database = {
           description?: string | null
           email?: string
           experience_years?: number | null
+          fcm_token?: string | null
           firm_id?: string | null
+          firm_logo_url?: string | null
           id?: string
           name?: string
           phone?: string | null
@@ -571,6 +718,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_invite: { Args: { invite_id: string }; Returns: undefined }
       can_edit_diary: {
         Args: { _diary_id: string; _user_id: string }
         Returns: boolean
@@ -579,6 +727,7 @@ export type Database = {
         Args: { _diary_id: string; _user_id: string }
         Returns: boolean
       }
+      get_portal_case: { Args: { p_token: string }; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -590,6 +739,7 @@ export type Database = {
         Args: { _diary_id: string; _user_id: string }
         Returns: boolean
       }
+      remove_member: { Args: { member_id: string }; Returns: undefined }
       search_directory: {
         Args: {
           _query: string
@@ -617,7 +767,7 @@ export type Database = {
         | "research_notes"
         | "case_law_citations"
       relationship_status: "pending" | "accepted" | "rejected" | "removed"
-      subscription_tier: "free" | "pro" | "firm"
+      subscription_tier: "free" | "pro" | "chambers" | "firm"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -754,7 +904,7 @@ export const Constants = {
         "case_law_citations",
       ],
       relationship_status: ["pending", "accepted", "rejected", "removed"],
-      subscription_tier: ["free", "pro", "firm"],
+      subscription_tier: ["free", "pro", "chambers", "firm"],
     },
   },
 } as const

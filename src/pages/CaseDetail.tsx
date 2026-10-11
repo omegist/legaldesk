@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2, Plus, CalendarDays, Trash2, Users, X, RefreshCw, Receipt, IndianRupee, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -62,6 +62,9 @@ export default function CaseDetail() {
   const [isSavingCnr, setIsSavingCnr] = useState(false);
   const [isSyncingCnr, setIsSyncingCnr] = useState(false);
   const [isGeneratingPortal, setIsGeneratingPortal] = useState(false);
+
+  // Optimistic locking: track last-known updated_at so we can detect concurrent edits
+  const lastKnownUpdatedAt = useRef<string | null>(null);
 
   const handleSharePortal = async () => {
     if (!diary || !user) return;
@@ -141,17 +144,26 @@ export default function CaseDetail() {
   const handleSaveCnr = async () => {
     if (!diary || !cnrInput.trim()) return;
     setIsSavingCnr(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from('diaries')
       .update({ cnr_number: cnrInput.trim(), cnr_sync_enabled: true })
-      .eq('id', diary.id)
+      .eq('id', diary.id);
+    if (lastKnownUpdatedAt.current) {
+      query = query.eq('updated_at', lastKnownUpdatedAt.current);
+    }
+    const { data, error } = await query
       .select()
-      .single();
+      .maybeSingle();
     setIsSavingCnr(false);
     if (error) {
       toast({ title: 'Could not save CNR', description: error.message, variant: 'destructive' });
       return;
     }
+    if (!data) {
+      toast({ title: 'Conflict detected', description: 'Another user modified this case. Please refresh.', variant: 'destructive' });
+      return;
+    }
+    lastKnownUpdatedAt.current = (data as any).updated_at ?? null;
     setDiary(data as Diary);
     toast({ title: 'CNR saved', description: 'Click "Sync now" to pull the latest court data.' });
   };
@@ -215,6 +227,7 @@ export default function CaseDetail() {
         .order('created_at', { ascending: false }),
     ]);
     setDiary((d as Diary) ?? null);
+    if (d) lastKnownUpdatedAt.current = (d as any).updated_at ?? null;
     setEntries((t as TimelineEntry[]) ?? []);
     setCnrInput((d as Diary)?.cnr_number || '');
     setIsLoading(false);
@@ -259,11 +272,20 @@ export default function CaseDetail() {
 
   const updateStatus = async (status: CaseStatus) => {
     if (!diary) return;
-    const { error } = await supabase.from('diaries').update({ status }).eq('id', diary.id);
+    let query = supabase.from('diaries').update({ status }).eq('id', diary.id);
+    if (lastKnownUpdatedAt.current) {
+      query = query.eq('updated_at', lastKnownUpdatedAt.current);
+    }
+    const { data, error } = await query.select().maybeSingle();
     if (error) {
       toast({ title: 'Could not update status', description: error.message, variant: 'destructive' });
       return;
     }
+    if (!data) {
+      toast({ title: 'Conflict detected', description: 'Another user modified this case. Please refresh.', variant: 'destructive' });
+      return;
+    }
+    lastKnownUpdatedAt.current = (data as any).updated_at ?? null;
     setDiary({ ...diary, status });
   };
 

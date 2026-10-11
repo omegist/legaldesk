@@ -52,7 +52,7 @@ export default function ClientPortal() {
     (async () => {
       const { data: result, error } = await supabase.rpc('get_portal_case', { p_token: token });
       if (error || !result) { setInvalid(true); setIsLoading(false); return; }
-      setData(result as PortalData);
+      setData(result as unknown as PortalData);
       setIsLoading(false);
     })();
   }, [token]);

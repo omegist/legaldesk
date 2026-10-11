@@ -72,12 +72,14 @@ export default function CreateInvoice() {
 
     setIsSaving(true);
 
-    // Simple sequential invoice numbering per lawyer: INV-0001, INV-0002, ...
-    const { count } = await supabase
-      .from('invoices')
-      .select('id', { count: 'exact', head: true })
-      .eq('lawyer_id', user.id);
-    const invoiceNumber = `INV-${String((count || 0) + 1).padStart(4, '0')}`;
+    // Atomic invoice numbering via database advisory lock — no race condition
+    const { data: invoiceNumber, error: numError } = await supabase
+      .rpc('generate_invoice_number', { p_lawyer_id: user.id });
+    if (numError || !invoiceNumber) {
+      setIsSaving(false);
+      toast({ title: 'Could not generate invoice number', description: numError?.message, variant: 'destructive' });
+      return;
+    }
 
     const { data: invoice, error } = await supabase
       .from('invoices')

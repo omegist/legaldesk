@@ -65,8 +65,13 @@ Deno.serve(async (req) => {
       update.firm_id = row.user_id;
     }
     await supabase.from('profiles').update(update).eq('id', row.user_id);
+  } else if (newStatus === 'halted') {
+    // Payment failed — downgrade to free but keep firm_id briefly so members aren't immediately kicked
+    await supabase.from('profiles').update({ subscription_tier: 'free' }).eq('id', row.user_id);
   } else if (['cancelled', 'expired', 'completed'].includes(newStatus)) {
+    // Clear firm_id for the owner AND all members
     await supabase.from('profiles').update({ subscription_tier: 'free', firm_id: null }).eq('id', row.user_id);
+    await supabase.from('profiles').update({ firm_id: null }).eq('firm_id', row.user_id).neq('id', row.user_id);
   }
 
   return new Response('ok', { status: 200 });

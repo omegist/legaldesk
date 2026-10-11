@@ -50,30 +50,9 @@ export default function ClientPortal() {
     if (!token) { setInvalid(true); setIsLoading(false); return; }
 
     (async () => {
-      // Look up the token
-      const { data: tokenRow } = await supabase
-        .from('client_portal_tokens')
-        .select('diary_id, lawyer_id')
-        .eq('token', token)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (!tokenRow) { setInvalid(true); setIsLoading(false); return; }
-
-      const [{ data: diary }, { data: profile }, { data: timeline }] = await Promise.all([
-        supabase.from('diaries').select('party_names, case_type, case_number, court_name, status, matter_date, hearing_time, stage_of_case, purpose_of_hearing').eq('id', tokenRow.diary_id).maybeSingle(),
-        supabase.from('profiles').select('name, phone').eq('id', tokenRow.lawyer_id).maybeSingle(),
-        supabase.from('diary_timeline_entries').select('id, entry_date, content').eq('diary_id', tokenRow.diary_id).order('entry_date', { ascending: false }).limit(20),
-      ]);
-
-      if (!diary) { setInvalid(true); setIsLoading(false); return; }
-
-      setData({
-        ...(diary as Omit<PortalData, 'lawyer_name' | 'lawyer_phone' | 'timeline'>),
-        lawyer_name: (profile as { name: string; phone: string | null } | null)?.name ?? 'Your Advocate',
-        lawyer_phone: (profile as { name: string; phone: string | null } | null)?.phone ?? null,
-        timeline: (timeline as { id: string; entry_date: string; content: string }[]) ?? [],
-      });
+      const { data: result, error } = await supabase.rpc('get_portal_case', { p_token: token });
+      if (error || !result) { setInvalid(true); setIsLoading(false); return; }
+      setData(result as PortalData);
       setIsLoading(false);
     })();
   }, [token]);
@@ -98,7 +77,6 @@ export default function ClientPortal() {
 
   return (
     <div className="min-h-screen bg-background legal-pattern pb-16">
-      {/* Minimal header — no nav, just branding */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur">
         <div className="container flex h-14 items-center gap-2">
           <Scale className="h-6 w-6 text-primary" />
@@ -108,7 +86,6 @@ export default function ClientPortal() {
       </header>
 
       <main className="container max-w-xl py-6 space-y-5">
-        {/* Status banner */}
         <div className={cn('rounded-xl border px-4 py-3 flex items-center justify-between gap-3', STATUS_STYLES[data.status])}>
           <div>
             <p className="text-xs uppercase tracking-widest opacity-70">Case Status</p>
@@ -119,7 +96,6 @@ export default function ClientPortal() {
           </Badge>
         </div>
 
-        {/* Case summary */}
         <Card className="glass-effect border-primary/20">
           <CardHeader className="pb-2">
             <CardTitle className="font-serif text-lg">{data.party_names}</CardTitle>
@@ -132,7 +108,6 @@ export default function ClientPortal() {
           </CardContent>
         </Card>
 
-        {/* Next date */}
         <Card className="glass-effect border-primary/20">
           <CardContent className="pt-4 flex items-center gap-3">
             <CalendarDays className="h-5 w-5 text-primary shrink-0" />
@@ -146,7 +121,6 @@ export default function ClientPortal() {
           </CardContent>
         </Card>
 
-        {/* Timeline */}
         {data.timeline.length > 0 && (
           <Card className="glass-effect border-primary/20">
             <CardHeader className="pb-2">
@@ -168,7 +142,6 @@ export default function ClientPortal() {
           </Card>
         )}
 
-        {/* Advocate contact */}
         <Card className="glass-effect border-primary/20">
           <CardContent className="pt-4">
             <p className="text-xs text-muted-foreground mb-1">Your Advocate</p>

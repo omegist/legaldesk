@@ -30,21 +30,19 @@ export default function Team() {
 
   const isOwner = !!profile?.firm_id && profile.firm_id === user?.id;
   const isMember = !!profile?.firm_id && profile.firm_id !== user?.id;
-
-  // Chambers = max 3 total (owner + 2 members). Firm = unlimited.
   const isChambers = profile?.subscription_tier === 'chambers';
-  const memberLimit = isChambers ? 2 : null;
-  const atCapacity = memberLimit !== null && members.length >= memberLimit;
 
   const [invites, setInvites] = useState<Invite[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [email, setEmail] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-
-  // Pending invite for the current user (member view)
   const [myInvite, setMyInvite] = useState<Invite | null>(null);
   const [isAccepting, setIsAccepting] = useState(false);
+
+  // Declared after members state — safe to use members.length here
+  const memberLimit = isChambers ? 2 : null;
+  const atCapacity = memberLimit !== null && members.length >= memberLimit;
 
   useEffect(() => {
     if (!user || !profile) return;
@@ -107,23 +105,23 @@ export default function Team() {
   }
 
   async function handleRemoveMember(memberId: string) {
-    await supabase.from('profiles').update({ firm_id: null }).eq('id', memberId);
+    const { error } = await supabase.rpc('remove_member', { member_id: memberId });
+    if (error) {
+      toast({ title: 'Could not remove member', description: error.message, variant: 'destructive' });
+      return;
+    }
     loadOwnerData();
   }
 
   async function handleAccept() {
     if (!myInvite || !user) return;
     setIsAccepting(true);
-    const { error } = await supabase
-      .from('firm_invites')
-      .update({ status: 'accepted' })
-      .eq('id', myInvite.id);
+    const { error } = await supabase.rpc('accept_invite', { invite_id: myInvite.id });
     if (error) {
       setIsAccepting(false);
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
       return;
     }
-    await supabase.from('profiles').update({ firm_id: myInvite.firm_id ?? null }).eq('id', user.id);
     await refreshProfile();
     setIsAccepting(false);
     toast({ title: 'Joined the chambers!', description: 'You can now see shared cases.' });
@@ -132,7 +130,8 @@ export default function Team() {
 
   const tierOk = profile?.subscription_tier === 'chambers' || profile?.subscription_tier === 'firm';
 
-  if (!tierOk && !isMember) {
+  // Members on free plan can still see and accept a pending invite
+  if (!tierOk && !isMember && !myInvite) {
     return (
       <div className="min-h-screen bg-background legal-pattern">
         <Header />
@@ -156,8 +155,8 @@ export default function Team() {
           <div className="flex justify-center py-16">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
-        ) : isMember ? (
-          /* ── Member view ── */
+        ) : isMember || myInvite ? (
+          /* ── Member / invitee view ── */
           <Card className="glass-effect border-primary/20">
             <CardHeader>
               <CardTitle className="font-serif text-lg">Your membership</CardTitle>

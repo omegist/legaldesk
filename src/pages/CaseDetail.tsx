@@ -66,7 +66,6 @@ export default function CaseDetail() {
   const handleSharePortal = async () => {
     if (!diary || !user) return;
     setIsGeneratingPortal(true);
-    // Reuse existing active token if present
     const { data: existing } = await supabase
       .from('client_portal_tokens')
       .select('token')
@@ -75,9 +74,10 @@ export default function CaseDetail() {
       .maybeSingle();
     let token = (existing as { token: string } | null)?.token;
     if (!token) {
+      const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
       const { data: created } = await supabase
         .from('client_portal_tokens')
-        .insert({ diary_id: diary.id, lawyer_id: user.id })
+        .insert({ diary_id: diary.id, lawyer_id: user.id, expires_at: expiresAt })
         .select('token')
         .single();
       token = (created as { token: string } | null)?.token;
@@ -86,7 +86,17 @@ export default function CaseDetail() {
     if (!token) { toast({ title: 'Could not generate link', variant: 'destructive' }); return; }
     const url = `${window.location.origin}/portal/${token}`;
     await navigator.clipboard.writeText(url).catch(() => {});
-    toast({ title: 'Client portal link copied!', description: 'Share this link with your client. They can view case status without logging in.' });
+    toast({ title: 'Client portal link copied!', description: 'Share this link with your client. It expires in 90 days.' });
+  };
+
+  const handleRevokePortal = async () => {
+    if (!diary) return;
+    await supabase
+      .from('client_portal_tokens')
+      .update({ is_active: false })
+      .eq('diary_id', diary.id)
+      .eq('is_active', true);
+    toast({ title: 'Portal link revoked', description: 'The client can no longer access the portal.' });
   };
 
   // Fee ledger
@@ -561,6 +571,9 @@ export default function CaseDetail() {
             <Button variant="outline" onClick={handleSharePortal} disabled={isGeneratingPortal} className="flex-1">
               {isGeneratingPortal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
               Share with Client
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleRevokePortal} className="text-destructive hover:text-destructive">
+              Revoke
             </Button>
           </div>
         )}

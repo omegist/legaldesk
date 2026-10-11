@@ -6,10 +6,9 @@ const supabase = createClient(
 );
 
 const ECOURTSINDIA_API_KEY = Deno.env.get('ECOURTSINDIA_API_KEY')!;
+const CRON_SECRET = Deno.env.get('CRON_SECRET');
 
-// Only sync cases whose next hearing is within this many days
 const SYNC_WINDOW_DAYS = 3;
-// Don't re-sync a case that was synced within this many hours
 const COOLDOWN_HOURS = 20;
 
 interface HearingHistoryEntry {
@@ -23,27 +22,25 @@ Deno.serve(async (req) => {
     return new Response('Method not allowed', { status: 405 });
   }
 
-  // IST = UTC + 5:30
+  // Require cron secret to prevent unauthorised triggers
+  if (CRON_SECRET) {
+    const auth = req.headers.get('Authorization') ?? '';
+    if (auth !== `Bearer ${CRON_SECRET}`) {
+      return new Response('Unauthorised', { status: 401 });
+    }
+  }
+
   const istOffset = 5.5 * 60 * 60 * 1000;
   const nowIST = new Date(Date.now() + istOffset);
-
   const todayISO = nowIST.toISOString().slice(0, 10);
   const windowEnd = new Date(nowIST);
   windowEnd.setDate(windowEnd.getDate() + SYNC_WINDOW_DAYS);
   const windowEndISO = windowEnd.toISOString().slice(0, 10);
-
   const cooldownCutoff = new Date(Date.now() - COOLDOWN_HOURS * 60 * 60 * 1000).toISOString();
 
-  // Fetch only cases that:
-  // 1. Have a CNR number
-  // 2. Have auto-sync enabled (Pro/Chambers/Firm users only)
-  // 3. Have next hearing within 3 days
-  // 4. Haven't been synced in the last 20 hours
-  // 5. Are still active
-  // 6. Lawyer is on a paid plan
   const { data: cases, error } = await supabase
     .from('diaries')
-    .select('id, cnr_number, lawyer_id, matter_date, cnr_last_synced_at, profiles!inner(subscription_tier)')
+    .select('id, cnr_number, lawyer_id, firm_id, matter_date, cnr_last_synced_at, profiles!inner(subscription_tier)')
     .not('cnr_number', 'is', null)
     .eq('cnr_sync_enabled', true)
     .eq('status', 'active')
@@ -53,12 +50,11 @@ Deno.serve(async (req) => {
     .neq('profiles.subscription_tier', 'free');
 
   if (error) {
-    console.error('Failed to fetch cases:', error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 
   if (!cases || cases.length === 0) {
-    return new Response(JSON.stringify({ synced: 0, skipped: 0, message: 'No cases need syncing' }), { status: 200 });
+    return new Response(JSON.stringify({ synced: 0, message: 'No cases need syncing' }), { status: 200 });
   }
 
   let synced = 0;
@@ -79,24 +75,29 @@ Deno.serve(async (req) => {
 
       const payload = await res.json();
       const c = payload.data.courtCaseData;
+      const isDisposed = c.caseStatus === 'DISPOSED';
 
-      // Update case with latest eCourts data
-      await supabase
-        .from('diaries')
-        .update({
-          matter_date: c.nextHearingDate,
-          purpose_of_hearing: c.stageOfCaseRaw || c.purpose,
-          stage_of_case: c.caseStatus === 'DISPOSED' ? 'disposed' : 'active',
-          judge_name: c.judges?.[0] ?? null,
-          court_name: c.courtName,
-          court_number: c.courtNo != null ? String(c.courtNo) : null,
-          party_names: formatPartyNames(c.petitioners, c.respondents),
-          opponent_advocate: c.respondentAdvocates?.[0] ?? null,
-          cnr_last_synced_at: new Date().toISOString(),
-        })
-        .eq('id', diary.id);
+      const update: Record<string, unknown> = {
+        purpose_of_hearing: c.stageOfCaseRaw || c.purpose || null,
+        judge_name: c.judges?.[0] ?? null,
+        court_name: c.courtName,
+        court_number: c.courtNo != null ? String(c.courtNo) : null,
+        party_names: formatPartyNames(c.petitioners, c.respondents),
+        opponent_advocate: c.respondentAdvocates?.[0] ?? null,
+        cnr_last_synced_at: new Date().toISOString(),
+      };
 
-      // Backfill timeline entries without duplicates
+      // Only update matter_date if court provides a non-null next hearing date
+      if (c.nextHearingDate) update.matter_date = c.nextHearingDate;
+
+      // Set status=disposed when court says so (stops reminders automatically)
+      if (isDisposed) update.status = 'disposed';
+
+      // Never write 'active' or 'disposed' into stage_of_case — it's a free-text field
+      // stage_of_case is only updated from stageOfCaseRaw above via purpose_of_hearing
+
+      await supabase.from('diaries').update(update).eq('id', diary.id);
+
       const history: HearingHistoryEntry[] = c.historyOfCaseHearings || [];
       for (const h of history) {
         const content = `${h.purposeOfListing} — before ${h.judge}`;

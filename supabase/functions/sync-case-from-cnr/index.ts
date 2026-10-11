@@ -41,7 +41,14 @@ Deno.serve(async (req) => {
 
     if (diaryError || !diary) return json({ error: 'Case not found' }, 404);
     if (diary.lawyer_id !== userData.user.id) {
-      return json({ error: 'You do not have access to this case' }, 403);
+      // Also allow firm members to sync firm cases
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('firm_id')
+        .eq('id', userData.user.id)
+        .single();
+      const isFirmMember = profile?.firm_id && diary.firm_id === profile.firm_id;
+      if (!isFirmMember) return json({ error: 'You do not have access to this case' }, 403);
     }
     if (!diary.cnr_number) return json({ error: 'This case has no CNR number set' }, 400);
 
@@ -73,20 +80,29 @@ Deno.serve(async (req) => {
     const payload = await res.json();
     const c = payload.data.courtCaseData;
 
-    // Update the case with the latest authoritative data from eCourts.
+    const isDisposed = c.caseStatus === 'DISPOSED';
+
+    const updateFields: Record<string, unknown> = {
+      purpose_of_hearing: c.stageOfCaseRaw || c.purpose || null,
+      judge_name: c.judges?.[0] ?? null,
+      court_name: c.courtName,
+      court_number: c.courtNo != null ? String(c.courtNo) : null,
+      party_names: formatPartyNames(c.petitioners, c.respondents),
+      opponent_advocate: c.respondentAdvocates?.[0] ?? null,
+      cnr_last_synced_at: new Date().toISOString(),
+    };
+
+    // Only update matter_date when court provides a non-null next hearing date
+    if (c.nextHearingDate) updateFields.matter_date = c.nextHearingDate;
+
+    // Set status=disposed when court says so (stops reminders)
+    if (isDisposed) updateFields.status = 'disposed';
+
+    // Never overwrite stage_of_case with 'active'/'disposed' — it's a free-text field
+
     const { error: updateError } = await supabase
       .from('diaries')
-      .update({
-        matter_date: c.nextHearingDate,
-        purpose_of_hearing: c.stageOfCaseRaw || c.purpose,
-        stage_of_case: mapCaseStatus(c.caseStatus),
-        judge_name: c.judges?.[0] ?? null,
-        court_name: c.courtName,
-        court_number: c.courtNo != null ? String(c.courtNo) : null,
-        party_names: formatPartyNames(c.petitioners, c.respondents),
-        opponent_advocate: c.respondentAdvocates?.[0] ?? null,
-        cnr_last_synced_at: new Date().toISOString(),
-      })
+      .update(updateFields)
       .eq('id', diaryId);
 
     if (updateError) {
@@ -122,27 +138,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    return json({ ok: true, nextHearingDate: c.nextHearingDate, stage: c.stageOfCaseRaw, timelineEntriesAdded: entriesAdded });
+    return json({ ok: true, nextHearingDate: c.nextHearingDate ?? null, disposed: isDisposed, timelineEntriesAdded: entriesAdded });
   } catch (err) {
     console.error('sync-case-from-cnr error:', err);
     return json({ error: String(err) }, 500);
   }
 });
 
-// eCourts' caseStatus is coarse ("PENDING"); map it onto your existing
-// stage_of_case values, defaulting to 'active' for anything still pending.
 function formatPartyNames(petitioners: string[] = [], respondents: string[] = []): string {
   const p = petitioners.length ? petitioners.join(', ') : 'Unknown';
   const r = respondents.length ? respondents.join(', ') : 'Unknown';
   return `${p} vs ${r}`;
-}
-
-function mapCaseStatus(caseStatus: string): string {
-  const map: Record<string, string> = {
-    PENDING: 'active',
-    DISPOSED: 'disposed',
-  };
-  return map[caseStatus] || 'active';
 }
 
 function json(body: unknown, status = 200): Response {

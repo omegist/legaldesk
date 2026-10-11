@@ -4,8 +4,10 @@ import { saveOffline, loadOffline } from '@/lib/native';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Diary } from '@/types';
 
-const CACHE_KEY = 'offline_cases';
-const CACHE_TS_KEY = 'offline_cases_ts';
+// Strip PII before caching
+function sanitize(cases: Diary[]): Diary[] {
+  return cases.map((c) => ({ ...c, client_phone: null, client_email: null }));
+}
 
 export function useOfflineCases() {
   const { user } = useAuth();
@@ -14,7 +16,6 @@ export function useOfflineCases() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const hasFetched = useRef(false);
 
-  // Track online/offline transitions
   useEffect(() => {
     const goOnline = () => setIsOffline(false);
     const goOffline = () => setIsOffline(true);
@@ -27,13 +28,21 @@ export function useOfflineCases() {
   }, []);
 
   useEffect(() => {
-    if (!user || hasFetched.current) return;
+    if (!user) {
+      // Clear cache on logout
+      setCases([]);
+      hasFetched.current = false;
+      return;
+    }
+
+    if (hasFetched.current) return;
     hasFetched.current = true;
+
+    const cacheKey = `offline_cases_${user.id}`;
 
     (async () => {
       if (!navigator.onLine) {
-        // Load from cache
-        const cached = await loadOffline<Diary[]>(CACHE_KEY);
+        const cached = await loadOffline<Diary[]>(cacheKey);
         setCases(cached ?? []);
         setIsLoading(false);
         return;
@@ -48,9 +57,7 @@ export function useOfflineCases() {
       setCases(fresh);
       setIsLoading(false);
 
-      // Persist to cache
-      await saveOffline(CACHE_KEY, fresh);
-      await saveOffline(CACHE_TS_KEY, new Date().toISOString());
+      await saveOffline(cacheKey, sanitize(fresh));
     })();
   }, [user]);
 

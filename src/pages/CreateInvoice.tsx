@@ -72,21 +72,14 @@ export default function CreateInvoice() {
 
     setIsSaving(true);
 
-    // Atomic invoice numbering via database advisory lock — no race condition
-    const { data: invoiceNumber, error: numError } = await supabase
-      .rpc('generate_invoice_number', { p_lawyer_id: user.id });
-    if (numError || !invoiceNumber) {
-      setIsSaving(false);
-      toast({ title: 'Could not generate invoice number', description: numError?.message, variant: 'destructive' });
-      return;
-    }
-
+    // Invoice number is assigned atomically by the DB BEFORE INSERT trigger —
+    // no RPC needed, no race condition, no auth bypass possible.
     const { data: invoice, error } = await supabase
       .from('invoices')
       .insert({
         lawyer_id: user.id,
         diary_id: linkedCase?.id ?? null,
-        invoice_number: invoiceNumber,
+        invoice_number: '',   // trigger overwrites this before the row is written
         client_name: form.client_name.trim(),
         client_email: form.client_email.trim() || null,
         client_phone: form.client_phone.trim() || null,
@@ -107,7 +100,7 @@ export default function CreateInvoice() {
       return;
     }
 
-    toast({ title: 'Invoice created', description: `${invoiceNumber} saved as draft.` });
+    toast({ title: 'Invoice created', description: `${invoice.invoice_number} saved as draft.` });
     navigate('/invoices');
   };
 

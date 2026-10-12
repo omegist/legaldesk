@@ -130,6 +130,19 @@ Deno.serve(async (req) => {
     return new Response('Method not allowed', { status: 405 });
   }
 
+  // Fail-closed: reject if the secret is not configured OR if the caller
+  // didn't provide it. Use x-cron-secret to avoid clashing with Supabase's
+  // own Authorization: Bearer JWT check.
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!cronSecret) {
+    console.error('CRON_SECRET env var is not set — refusing to run');
+    return new Response('Service misconfigured', { status: 500 });
+  }
+  const providedSecret = req.headers.get('x-cron-secret');
+  if (providedSecret !== cronSecret) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
   // Tomorrow in IST (UTC+5:30)
   const now = new Date();
   const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);

@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -199,7 +199,7 @@ export type Database = {
           created_by: string
           diary_id: string
           entry_date: string
-          entry_type: string | null
+          entry_type: string
           id: string
         }
         Insert: {
@@ -208,7 +208,7 @@ export type Database = {
           created_by: string
           diary_id: string
           entry_date?: string
-          entry_type?: string | null
+          entry_type?: string
           id?: string
         }
         Update: {
@@ -217,7 +217,7 @@ export type Database = {
           created_by?: string
           diary_id?: string
           entry_date?: string
-          entry_type?: string | null
+          entry_type?: string
           id?: string
         }
         Relationships: [
@@ -242,6 +242,7 @@ export type Database = {
           notes: string | null
           ocr_text: string | null
           owner_id: string
+          security_level: string | null
           storage_key: string
           updated_at: string
         }
@@ -256,6 +257,7 @@ export type Database = {
           notes?: string | null
           ocr_text?: string | null
           owner_id: string
+          security_level?: string | null
           storage_key: string
           updated_at?: string
         }
@@ -270,6 +272,7 @@ export type Database = {
           notes?: string | null
           ocr_text?: string | null
           owner_id?: string
+          security_level?: string | null
           storage_key?: string
           updated_at?: string
         }
@@ -713,6 +716,36 @@ export type Database = {
         }
         Relationships: []
       }
+      vault_credentials: {
+        Row: {
+          created_at: string | null
+          credential_id: string
+          device_name: string | null
+          id: string
+          public_key: string
+          sign_count: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          credential_id: string
+          device_name?: string | null
+          id?: string
+          public_key: string
+          sign_count?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          credential_id?: string
+          device_name?: string | null
+          id?: string
+          public_key?: string
+          sign_count?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -767,7 +800,7 @@ export type Database = {
         | "research_notes"
         | "case_law_citations"
       relationship_status: "pending" | "accepted" | "rejected" | "removed"
-      subscription_tier: "free" | "pro" | "chambers" | "firm"
+      subscription_tier: "free" | "pro" | "firm" | "chambers"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -904,7 +937,7 @@ export const Constants = {
         "case_law_citations",
       ],
       relationship_status: ["pending", "accepted", "rejected", "removed"],
-      subscription_tier: ["free", "pro", "chambers", "firm"],
+      subscription_tier: ["free", "pro", "firm", "chambers"],
     },
   },
 } as const

@@ -60,6 +60,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
+    // Clear any offline / session data that was persisted locally
+    try {
+      const keysToRemove = Object.keys(localStorage).filter(
+        (k) => k.startsWith('vd_') || k.startsWith('vault_') || k.startsWith('offline_')
+      );
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // localStorage not available in some environments — safe to ignore
+    }
     setProfile(null);
     setUser(null);
     setSession(null);

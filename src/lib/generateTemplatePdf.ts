@@ -201,7 +201,7 @@ export interface BailApplicationData {
 export function generateBailApplication(d: BailApplicationData, logoUrl?: string | null): Blob {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const offset = addLogo(doc, logoUrl);
-  let y = header(doc, 'APPLICATION FOR BAIL', 'Under Section 437/439 Cr.P.C.', offset);
+  let y = header(doc, 'APPLICATION FOR BAIL', 'Under Section 480/483 BNSS, 2023 (formerly Sec. 437/439 Cr.P.C.)', offset);
 
   y = field(doc, 'In the Court of', d.court_name, y);
   y = field(doc, 'Case', `${d.case_type} No. ${d.case_number} / ${d.year}`, y);

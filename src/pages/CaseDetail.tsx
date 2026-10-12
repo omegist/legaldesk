@@ -47,11 +47,12 @@ export default function CaseDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   const [diary, setDiary] = useState<Diary | null>(null);
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [newEntry, setNewEntry] = useState('');
+  const [shareWithClient, setShareWithClient] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [shares, setShares] = useState<DiaryShare[]>([]);
@@ -181,7 +182,17 @@ export default function CaseDetail() {
 
     const handleSyncNow = async () => {
     if (!diary) return;
+    // CNR sync costs credits — only available on paid tiers
+    if (profile?.subscription_tier === 'free') {
+      toast({
+        title: 'Upgrade required',
+        description: 'CNR sync is available on Pro and above. Upgrade your plan to use this feature.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setIsSyncingCnr(true);
+
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
@@ -296,6 +307,7 @@ export default function CaseDetail() {
       diary_id: diary.id,
       content: newEntry.trim(),
       created_by: user.id,
+      entry_type: shareWithClient ? 'order' : 'private',
     });
     setIsSaving(false);
     if (error) {
@@ -303,6 +315,7 @@ export default function CaseDetail() {
       return;
     }
     setNewEntry('');
+    setShareWithClient(false);
     load();
   };
 
@@ -652,6 +665,17 @@ export default function CaseDetail() {
                 disabled={!canAddNotes}
                 className="bg-secondary/50"
               />
+              {canAddNotes && (
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={shareWithClient}
+                    onChange={(e) => setShareWithClient(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded accent-primary"
+                  />
+                  Share with client (visible in client portal)
+                </label>
+              )}
               <Button
                 onClick={addEntry}
                 disabled={!canAddNotes || isSaving || !newEntry.trim()}

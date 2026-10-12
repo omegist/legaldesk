@@ -102,12 +102,12 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
             <ShieldCheck className="h-7 w-7 text-primary" />
           </div>
           <DialogTitle className="font-serif text-xl">
-            {mode === 'register' ? 'Secure Your Vault' : 'Protected Document'}
+            {mode === 'register' ? 'Set Up Screen Lock' : 'Screen Lock Active'}
           </DialogTitle>
           <DialogDescription className="text-center text-sm">
             {mode === 'register'
-              ? 'Set up biometric or PIN protection for sensitive legal documents.'
-              : 'This document requires identity verification to open.'}
+              ? 'Add a fingerprint or PIN screen lock for sensitive legal documents. This is a device-level screen lock — not cryptographic encryption.'
+              : 'This document has a screen lock. Verify with your fingerprint or PIN to continue.'}
           </DialogDescription>
         </DialogHeader>
 

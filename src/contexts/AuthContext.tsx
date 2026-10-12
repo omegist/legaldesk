@@ -59,16 +59,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, loadProfile]);
 
   const logout = useCallback(async () => {
-    await supabase.auth.signOut();
-    // Clear any offline / session data that was persisted locally
+    // Clear Capacitor Preferences (SharedPreferences on Android,
+    // CapacitorStorage.* prefixed localStorage on web) BEFORE signing out so
+    // the keys are accessible while the session is still valid.
     try {
-      const keysToRemove = Object.keys(localStorage).filter(
-        (k) => k.startsWith('vd_') || k.startsWith('vault_') || k.startsWith('offline_')
+      const { Preferences } = await import('@capacitor/preferences');
+      const { keys } = await Preferences.keys();
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith('offline_'))
+          .map((key) => Preferences.remove({ key })),
       );
-      keysToRemove.forEach((k) => localStorage.removeItem(k));
     } catch {
-      // localStorage not available in some environments — safe to ignore
+      // Capacitor not available (pure web build) — fall back to localStorage scan
+      try {
+        const keysToRemove = Object.keys(localStorage).filter((k) =>
+          k.startsWith('vd_') || k.startsWith('vault_') || k.startsWith('offline_') ||
+          k.startsWith('CapacitorStorage.offline_'),
+        );
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      } catch {
+        // Storage not available — safe to ignore
+      }
     }
+    await supabase.auth.signOut();
     setProfile(null);
     setUser(null);
     setSession(null);

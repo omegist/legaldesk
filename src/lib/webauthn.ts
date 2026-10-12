@@ -69,13 +69,13 @@ export async function registerCredential(
 
   const credential = await navigator.credentials.create({
     publicKey: {
-      challenge,
+      challenge: challenge as BufferSource,
       rp: {
         name: 'VakilDesk',
         id: window.location.hostname,
       },
       user: {
-        id: userIdBytes,
+        id: userIdBytes as BufferSource,
         name: userName,
         displayName,
       },
@@ -84,12 +84,12 @@ export async function registerCredential(
         { type: 'public-key', alg: -257 },  // RS256 (fallback)
       ],
       authenticatorSelection: {
-        authenticatorAttachment: 'platform', // Use device biometric (not security key)
-        userVerification: 'required',        // Must verify fingerprint/PIN
+        authenticatorAttachment: 'platform' as AuthenticatorAttachment,
+        userVerification: 'required' as UserVerificationRequirement,
         requireResidentKey: false,
       },
       timeout: 60000,
-      attestation: 'none', // We don't need attestation for this use-case
+      attestation: 'none' as AttestationConveyancePreference,
     },
   }) as PublicKeyCredential | null;
 
@@ -125,16 +125,16 @@ export async function verifyCredential(credentialIds: string[]): Promise<Verific
   const challenge = generateChallenge();
 
   const allowCredentials: PublicKeyCredentialDescriptor[] = credentialIds.map((id) => ({
-    type: 'public-key',
-    id: base64ToUint8Array(id),
-    transports: ['internal'] as AuthenticatorTransport[], // 'internal' = platform biometric
+    type: 'public-key' as const,
+    id: base64ToUint8Array(id) as BufferSource,
+    transports: ['internal'] as AuthenticatorTransport[],
   }));
 
   const assertion = await navigator.credentials.get({
     publicKey: {
-      challenge,
+      challenge: challenge as BufferSource,
       allowCredentials,
-      userVerification: 'required',
+      userVerification: 'required' as UserVerificationRequirement,
       timeout: 60000,
     },
   }) as PublicKeyCredential | null;

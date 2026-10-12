@@ -6,7 +6,6 @@ const supabase = createClient(
 );
 
 const ECOURTSINDIA_API_KEY = Deno.env.get('ECOURTSINDIA_API_KEY')!;
-const CRON_SECRET = Deno.env.get('CRON_SECRET');
 
 const SYNC_WINDOW_DAYS = 3;
 const COOLDOWN_HOURS = 20;
@@ -22,12 +21,16 @@ Deno.serve(async (req) => {
     return new Response('Method not allowed', { status: 405 });
   }
 
-  // Require cron secret to prevent unauthorised triggers
-  if (CRON_SECRET) {
-    const auth = req.headers.get('Authorization') ?? '';
-    if (auth !== `Bearer ${CRON_SECRET}`) {
-      return new Response('Unauthorised', { status: 401 });
-    }
+  // Fail-closed: reject if the secret is not configured OR if the caller
+  // didn't provide it. Use x-cron-secret to avoid clashing with Supabase's
+  // own Authorization: Bearer JWT check.
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  if (!cronSecret) {
+    console.error('CRON_SECRET env var is not set — refusing to run');
+    return new Response('Service misconfigured', { status: 500 });
+  }
+  if (req.headers.get('x-cron-secret') !== cronSecret) {
+    return new Response('Unauthorized', { status: 401 });
   }
 
   const istOffset = 5.5 * 60 * 60 * 1000;
@@ -40,14 +43,13 @@ Deno.serve(async (req) => {
 
   const { data: cases, error } = await supabase
     .from('diaries')
-    .select('id, cnr_number, lawyer_id, firm_id, matter_date, cnr_last_synced_at, profiles!inner(subscription_tier)')
+    .select('id, cnr_number, lawyer_id, firm_id, matter_date, cnr_last_synced_at')
     .not('cnr_number', 'is', null)
     .eq('cnr_sync_enabled', true)
     .eq('status', 'active')
     .gte('matter_date', todayISO)
     .lte('matter_date', windowEndISO)
-    .or(`cnr_last_synced_at.is.null,cnr_last_synced_at.lt.${cooldownCutoff}`)
-    .neq('profiles.subscription_tier', 'free');
+    .or(`cnr_last_synced_at.is.null,cnr_last_synced_at.lt.${cooldownCutoff}`);
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
@@ -57,10 +59,29 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ synced: 0, message: 'No cases need syncing' }), { status: 200 });
   }
 
+  // Fetch profiles separately to avoid broken !inner embed
+  const lawyerIds = [...new Set(cases.map((c) => c.lawyer_id))];
+  const { data: profileRows } = await supabase
+    .from('profiles')
+    .select('id, subscription_tier, firm_id')
+    .in('id', lawyerIds);
+  const profileMap = new Map((profileRows ?? []).map((p) => [p.id, p]));
+
   let synced = 0;
   let failed = 0;
 
   for (const diary of cases) {
+    // Skip free-tier lawyers (and firm members whose owner is also free)
+    const lp = profileMap.get(diary.lawyer_id);
+    if (!lp) { failed++; continue; }
+    const isOwnerPaid = lp.subscription_tier !== 'free';
+    let isPaid = isOwnerPaid;
+    if (!isPaid && lp.firm_id && lp.firm_id !== diary.lawyer_id) {
+      const ownerProfile = profileMap.get(lp.firm_id);
+      isPaid = ownerProfile?.subscription_tier === 'chambers' || ownerProfile?.subscription_tier === 'firm';
+    }
+    if (!isPaid) continue;
+
     try {
       const res = await fetch(
         `https://webapi.ecourtsindia.com/api/partner/case/${diary.cnr_number}`,

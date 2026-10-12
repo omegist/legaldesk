@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Fingerprint, KeyRound, ShieldCheck, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Fingerprint, KeyRound, ShieldCheck, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,7 @@ interface VaultAuthGateProps {
   onAuthenticated: () => void;
   /** Called when the user dismisses without authenticating. */
   onCancel: () => void;
-  /** 'verify' = unlock the vault, 'register' = set up biometrics/PIN for the first time. */
+  /** 'verify' = unlock the vault, 'register' = set up screen lock for the first time. */
   mode: 'verify' | 'register';
   auth: VaultAuthState;
 }
@@ -31,19 +32,22 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
-  const [step, setStep] = useState<'choose' | 'pin-set' | 'pin-confirm' | 'pin-verify'>('choose');
+  // accountPassword is required before saving/clearing a PIN to prevent bypass.
+  const [accountPassword, setAccountPassword] = useState('');
+  const [step, setStep] = useState<'choose' | 'pin-password' | 'pin-set' | 'pin-confirm' | 'pin-verify'>('choose');
   const [showBiometricError, setShowBiometricError] = useState('');
 
   const reset = () => {
     setPin('');
     setConfirmPin('');
     setPinError('');
+    setAccountPassword('');
     setShowBiometricError('');
     setStep('choose');
   };
 
-  const handleOpenChange = (open: boolean) => {
-    if (!open) {
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
       reset();
       onCancel();
     }
@@ -62,16 +66,18 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
     }
   };
 
-  const handleSetPin = async () => {
+  const handleSetPin = () => {
     if (pin.length !== 6) { setPinError('Please enter a 6-digit PIN.'); return; }
     setStep('pin-confirm');
   };
 
   const handleConfirmPin = async () => {
     if (confirmPin !== pin) { setPinError('PINs do not match. Try again.'); setConfirmPin(''); return; }
-    const ok = await auth.setPin(pin);
-    if (ok) { reset(); onAuthenticated(); }
-    else setPinError('Could not save PIN. Please try again.');
+    if (!accountPassword) { setPinError('Please enter your account password to confirm.'); return; }
+
+    const result = await auth.setPin(pin, accountPassword);
+    if (result.ok) { reset(); onAuthenticated(); }
+    else setPinError(result.error ?? 'Could not save PIN. Please try again.');
   };
 
   // ─── Verify flow ───────────────────────────────────────────────────────────
@@ -85,14 +91,24 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
 
   const handleVerifyPin = async () => {
     if (pin.length !== 6) return;
+    if (auth.lockoutSecondsLeft > 0) return;
     const ok = await auth.verifyPin(pin);
     if (ok) { reset(); onAuthenticated(); }
-    else { setPinError('Incorrect PIN. Please try again.'); setPin(''); }
+    else {
+      const secondsLeft = auth.lockoutSecondsLeft;
+      if (secondsLeft > 0) {
+        setPinError(`Too many incorrect attempts. Wait ${secondsLeft}s before trying again.`);
+      } else {
+        setPinError('Incorrect PIN. Please try again.');
+      }
+      setPin('');
+    }
   };
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const isLoading = auth.isRegistering || auth.isVerifying;
+  const isLockedOut = auth.lockoutSecondsLeft > 0;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -131,7 +147,7 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
               <Button
                 variant="outline"
                 className="w-full h-12 border-primary/30"
-                onClick={() => setStep('pin-set')}
+                onClick={() => setStep('pin-password')}
                 disabled={isLoading}
               >
                 <KeyRound className="mr-2 h-4 w-4" />
@@ -141,6 +157,36 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
                 <p className="text-xs text-destructive text-center">{showBiometricError}</p>
               )}
             </>
+          )}
+
+          {/* ── REGISTER: confirm account password before PIN ── */}
+          {mode === 'register' && step === 'pin-password' && (
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground text-center">
+                Enter your VakilDesk account password to confirm your identity before setting a PIN.
+              </p>
+              <Input
+                type="password"
+                placeholder="Account password"
+                value={accountPassword}
+                onChange={(e) => setAccountPassword(e.target.value)}
+                className="bg-secondary/50"
+              />
+              {pinError && <p className="text-xs text-destructive">{pinError}</p>}
+              <Button
+                className="w-full gold-gradient text-primary-foreground"
+                onClick={() => {
+                  if (!accountPassword) { setPinError('Please enter your account password.'); return; }
+                  setPinError('');
+                  setStep('pin-set');
+                }}
+              >
+                Continue
+              </Button>
+              <button onClick={() => setStep('choose')} className="text-xs text-muted-foreground hover:text-foreground">
+                ← Back
+              </button>
+            </div>
           )}
 
           {/* ── REGISTER: enter new PIN ── */}
@@ -156,7 +202,7 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
               <Button className="w-full gold-gradient text-primary-foreground" onClick={handleSetPin} disabled={pin.length !== 6}>
                 Continue
               </Button>
-              <button onClick={() => setStep('choose')} className="text-xs text-muted-foreground hover:text-foreground">
+              <button onClick={() => setStep('pin-password')} className="text-xs text-muted-foreground hover:text-foreground">
                 ← Back
               </button>
             </div>
@@ -199,21 +245,31 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
                   {(auth.hasCredentials && auth.hasBiometrics) && (
                     <p className="text-xs text-muted-foreground">Or enter your PIN</p>
                   )}
-                  <InputOTP
-                    maxLength={6}
-                    value={pin}
-                    onChange={(v) => { setPin(v); setPinError(''); if (v.length === 6) { /* auto-submit */ } }}
-                  >
-                    <InputOTPGroup>
-                      {[0,1,2,3,4,5].map(i => <InputOTPSlot key={i} index={i} />)}
-                    </InputOTPGroup>
-                  </InputOTP>
+                  {isLockedOut ? (
+                    <div className="flex flex-col items-center gap-2 py-2">
+                      <Lock className="h-6 w-6 text-destructive" />
+                      <p className="text-sm text-destructive font-medium">Too many incorrect attempts</p>
+                      <p className="text-xs text-muted-foreground">
+                        Try again in <strong>{auth.lockoutSecondsLeft}s</strong>
+                      </p>
+                    </div>
+                  ) : (
+                    <InputOTP
+                      maxLength={6}
+                      value={pin}
+                      onChange={(v) => { setPin(v); setPinError(''); }}
+                    >
+                      <InputOTPGroup>
+                        {[0,1,2,3,4,5].map(i => <InputOTPSlot key={i} index={i} />)}
+                      </InputOTPGroup>
+                    </InputOTP>
+                  )}
                   {pinError && <p className="text-xs text-destructive">{pinError}</p>}
                   <Button
                     variant="outline"
                     className="w-full border-primary/30"
                     onClick={handleVerifyPin}
-                    disabled={pin.length !== 6 || isLoading}
+                    disabled={pin.length !== 6 || isLoading || isLockedOut}
                   >
                     <KeyRound className="mr-2 h-4 w-4" />
                     Unlock with PIN
@@ -225,13 +281,13 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
               {!auth.hasCredentials && !auth.hasPin && (
                 <div className="text-center space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    You haven't set up vault security yet.
+                    You haven't set up a screen lock yet.
                   </p>
                   <Button
                     className="w-full gold-gradient text-primary-foreground"
                     onClick={() => { onCancel(); }}
                   >
-                    Set Up Security First
+                    Set Up Screen Lock First
                   </Button>
                 </div>
               )}
@@ -247,4 +303,3 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
     </Dialog>
   );
 }
-

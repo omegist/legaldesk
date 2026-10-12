@@ -5,8 +5,21 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
 
+// ── Config ────────────────────────────────────────────────────────────────────
+// FROM_EMAIL and APP_URL must be set as Supabase secrets.
+// FROM_EMAIL example: VakilDesk <reminders@vakildesks.in>
+// APP_URL example: https://vakildesks.in
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!;
-const FROM_EMAIL = 'VakilDesk <reminders@vakildesks.in>';
+const FROM_EMAIL = Deno.env.get('FROM_EMAIL') ?? 'VakilDesk <reminders@vakildesks.in>';
+const APP_URL = Deno.env.get('APP_URL') ?? 'https://vakildesks.in';
+
+// ── HTML escaping ─────────────────────────────────────────────────────────────
+// MUST be applied to every user-controlled value interpolated into email HTML.
+function esc(s: unknown): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!),
+  );
+}
 
 // ── Resend ────────────────────────────────────────────────────────────────────
 async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
@@ -19,34 +32,40 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
     body: JSON.stringify({ from: FROM_EMAIL, to, subject, html }),
   });
   if (!res.ok) {
-    console.error('Resend error:', await res.text());
+    // Log status code only — don't log email addresses or keys
+    console.error('Resend error status:', res.status);
   }
   return res.ok;
 }
 
-function emailHtml(lawyerName: string, hearings: { party_names: string; court: string; time: string }[]): string {
+function emailHtml(
+  lawyerName: string,
+  hearings: { party_names: string; court: string; time: string }[],
+): string {
   const rows = hearings
     .map(
       (h) => `
       <tr>
         <td style="padding:10px 0;border-bottom:1px solid #2a2a2a;">
-          <strong style="color:#c9a24b;">${h.party_names}</strong><br/>
-          <span style="color:#888;font-size:13px;">${h.court}${h.time ? ' · ' + h.time : ''}</span>
+          <strong style="color:#c9a24b;">${esc(h.party_names)}</strong><br/>
+          <span style="color:#888;font-size:13px;">${esc(h.court)}${h.time ? ' · ' + esc(h.time) : ''}</span>
         </td>
       </tr>`,
     )
     .join('');
 
+  const settingsUrl = `${APP_URL}/settings/notifications`;
+
   return `
     <div style="background:#0f0f0f;color:#e5e5e5;font-family:Georgia,serif;max-width:560px;margin:0 auto;padding:32px 24px;border-radius:12px;">
       <h2 style="color:#c9a24b;margin:0 0 4px;">VakilDesk</h2>
       <p style="color:#888;font-size:13px;margin:0 0 24px;">Hearing Reminder</p>
-      <p style="margin:0 0 16px;">Dear <strong>${lawyerName}</strong>,</p>
+      <p style="margin:0 0 16px;">Dear <strong>${esc(lawyerName)}</strong>,</p>
       <p style="margin:0 0 20px;color:#ccc;">You have the following hearing(s) scheduled for <strong style="color:#fff;">tomorrow</strong>:</p>
       <table style="width:100%;border-collapse:collapse;">${rows}</table>
       <p style="margin:24px 0 0;font-size:12px;color:#555;">
         You're receiving this because you enabled email reminders in VakilDesk.<br/>
-        Manage your preferences at <a href="https://vakildesks.in/settings/notifications" style="color:#c9a24b;">vakildesks.in</a>
+        Manage your preferences at <a href="${settingsUrl}" style="color:#c9a24b;">${APP_URL.replace(/^https?:\/\//, '')}/settings/notifications</a>
       </p>
     </div>`;
 }
@@ -100,7 +119,13 @@ async function getFirebaseAccessToken(serviceAccount: Record<string, string>): P
   return tokenData.access_token;
 }
 
-async function sendFCM(token: string, title: string, body: string, accessToken: string, projectId: string) {
+async function sendFCM(
+  token: string,
+  title: string,
+  body: string,
+  accessToken: string,
+  projectId: string,
+): Promise<'ok' | 'invalid_token' | 'error'> {
   const res = await fetch(
     `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
     {
@@ -121,7 +146,11 @@ async function sendFCM(token: string, title: string, body: string, accessToken: 
       }),
     },
   );
-  return res.ok;
+  if (res.ok) return 'ok';
+  const errBody = await res.json().catch(() => ({}));
+  const errCode = errBody?.error?.details?.[0]?.errorCode ?? '';
+  if (errCode === 'UNREGISTERED' || errCode === 'INVALID_ARGUMENT') return 'invalid_token';
+  return 'error';
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -150,14 +179,10 @@ Deno.serve(async (req) => {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowISO = tomorrow.toISOString().slice(0, 10);
 
-  // Fetch hearings with lawyer profile + notification settings
-  const { data: hearings, error } = await supabase
+  // ── Fetch hearings (no embed — separate profile/settings queries) ────────────
+  const { data: diaries, error } = await supabase
     .from('diaries')
-    .select(`
-      party_names, court_name, court_number, hearing_time, lawyer_id,
-      profiles!inner(name, email, fcm_token),
-      notification_settings!left(email_enabled, reminder_hours)
-    `)
+    .select('id, party_names, court_name, court_number, hearing_time, lawyer_id')
     .eq('matter_date', tomorrowISO)
     .eq('status', 'active');
 
@@ -165,69 +190,171 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 
-  if (!hearings || hearings.length === 0) {
+  if (!diaries || diaries.length === 0) {
     return new Response(JSON.stringify({ sent: 0, message: 'No hearings tomorrow' }), { status: 200 });
   }
 
-  // Group hearings by lawyer_id so we send one email per lawyer (not one per case)
-  const byLawyer = new Map<string, typeof hearings>();
-  for (const h of hearings) {
-    const existing = byLawyer.get(h.lawyer_id) ?? [];
-    existing.push(h);
-    byLawyer.set(h.lawyer_id, existing);
+  const lawyerIds = [...new Set(diaries.map((d) => d.lawyer_id))];
+
+  const [{ data: profileRows }, { data: settingsRows }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, name, email, fcm_token')
+      .in('id', lawyerIds),
+    supabase
+      .from('notification_settings')
+      .select('user_id, email_enabled, push_enabled')
+      .in('user_id', lawyerIds),
+  ]);
+
+  const profileMap = new Map((profileRows ?? []).map((p) => [p.id, p]));
+  const settingsMap = new Map((settingsRows ?? []).map((s) => [s.user_id, s]));
+
+  // Group hearings by lawyer
+  const byLawyer = new Map<string, typeof diaries>();
+  for (const d of diaries) {
+    const existing = byLawyer.get(d.lawyer_id) ?? [];
+    existing.push(d);
+    byLawyer.set(d.lawyer_id, existing);
   }
 
-  const serviceAccount = JSON.parse(Deno.env.get('FIREBASE_SERVICE_ACCOUNT')!);
-  const projectId = Deno.env.get('FIREBASE_PROJECT_ID')!;
-  const fcmAccessToken = await getFirebaseAccessToken(serviceAccount);
+  // FCM setup (only if configured)
+  const fcmServiceAccountRaw = Deno.env.get('FIREBASE_SERVICE_ACCOUNT');
+  const projectId = Deno.env.get('FIREBASE_PROJECT_ID');
+  let fcmAccessToken: string | null = null;
+  if (fcmServiceAccountRaw && projectId) {
+    try {
+      const serviceAccount = JSON.parse(fcmServiceAccountRaw);
+      fcmAccessToken = await getFirebaseAccessToken(serviceAccount);
+    } catch (e) {
+      console.error('FCM token error:', e);
+    }
+  }
 
   let emailsSent = 0;
   let pushSent = 0;
+  const invalidTokens: string[] = [];
 
-  for (const [, lawyerHearings] of byLawyer) {
-    const first = lawyerHearings[0];
-    const profile = Array.isArray(first.profiles) ? first.profiles[0] : first.profiles;
-    const notifSettings = Array.isArray(first.notification_settings)
-      ? first.notification_settings[0]
-      : first.notification_settings;
+  for (const [lawyerId, lawyerHearings] of byLawyer) {
+    try {
+      const profile = profileMap.get(lawyerId);
+      const ns = settingsMap.get(lawyerId);
+      const emailEnabled = ns?.email_enabled ?? true; // default on
+      const pushEnabled = ns?.push_enabled ?? true;
 
-    const emailEnabled = notifSettings?.email_enabled ?? true; // default on
-    const fcmToken = profile?.fcm_token;
+      // ── Claim this reminder to prevent double sends ──────────────────────
+      // Uses upsert + ignoreDuplicates so a second run is a no-op.
+      const diary0 = lawyerHearings[0];
 
-    // ── Email via Resend ──
-    if (emailEnabled && profile?.email) {
-      const hearingList = lawyerHearings.map((h) => ({
-        party_names: h.party_names,
-        court: h.court_number ? `${h.court_name} · Court ${h.court_number}` : h.court_name,
-        time: h.hearing_time ? h.hearing_time.slice(0, 5) : '',
-      }));
+      // ── Email via Resend ─────────────────────────────────────────────────
+      if (emailEnabled && profile?.email) {
+        const { data: claimed } = await supabase
+          .from('reminder_log')
+          .upsert(
+            { diary_id: diary0.id, reminder_date: tomorrowISO, channel: 'email' },
+            { onConflict: 'diary_id,reminder_date,channel', ignoreDuplicates: true },
+          )
+          .select('id');
 
-      const subject = lawyerHearings.length === 1
-        ? `Hearing tomorrow: ${lawyerHearings[0].party_names}`
-        : `${lawyerHearings.length} hearings tomorrow — VakilDesk`;
+        if (claimed && claimed.length > 0) {
+          const hearingList = lawyerHearings.map((h) => ({
+            party_names: h.party_names ?? '',
+            court: h.court_number
+              ? `${h.court_name ?? ''} · Court ${h.court_number}`
+              : (h.court_name ?? ''),
+            time: h.hearing_time ? h.hearing_time.slice(0, 5) : '',
+          }));
 
-      const ok = await sendEmail(
-        profile.email,
-        subject,
-        emailHtml(profile.name, hearingList),
-      );
-      if (ok) emailsSent++;
+          const subject =
+            lawyerHearings.length === 1
+              ? `Hearing tomorrow: ${lawyerHearings[0].party_names ?? ''}`
+              : `${lawyerHearings.length} hearings tomorrow — VakilDesk`;
+
+          const ok = await sendEmail(
+            profile.email,
+            subject,
+            emailHtml(profile.name ?? '', hearingList),
+          );
+          if (ok) {
+            emailsSent++;
+          } else {
+            // Delete the claim so a retry can re-send
+            await supabase
+              .from('reminder_log')
+              .delete()
+              .eq('diary_id', diary0.id)
+              .eq('reminder_date', tomorrowISO)
+              .eq('channel', 'email');
+          }
+        }
+      }
+
+      // ── FCM push notification ────────────────────────────────────────────
+      if (pushEnabled && fcmAccessToken && projectId && profile?.fcm_token) {
+        const { data: pushClaimed } = await supabase
+          .from('reminder_log')
+          .upsert(
+            { diary_id: diary0.id, reminder_date: tomorrowISO, channel: 'push' },
+            { onConflict: 'diary_id,reminder_date,channel', ignoreDuplicates: true },
+          )
+          .select('id');
+
+        if (pushClaimed && pushClaimed.length > 0) {
+          const time = diary0.hearing_time ? diary0.hearing_time.slice(0, 5) : '';
+          const court = diary0.court_number
+            ? `${diary0.court_name} · Court ${diary0.court_number}`
+            : diary0.court_name;
+          const title = `Hearing Tomorrow${time ? ` at ${time}` : ''}`;
+          const body =
+            lawyerHearings.length === 1
+              ? `${diary0.party_names ?? ''} — ${court ?? ''}`
+              : `${lawyerHearings.length} hearings scheduled`;
+
+          const result = await sendFCM(
+            profile.fcm_token,
+            title,
+            body,
+            fcmAccessToken,
+            projectId,
+          );
+
+          if (result === 'ok') {
+            pushSent++;
+          } else if (result === 'invalid_token') {
+            // Token is stale — clear it so future runs skip this device
+            invalidTokens.push(lawyerId);
+            await supabase
+              .from('reminder_log')
+              .delete()
+              .eq('diary_id', diary0.id)
+              .eq('reminder_date', tomorrowISO)
+              .eq('channel', 'push');
+          } else {
+            // Transient error — delete claim so a retry can push
+            await supabase
+              .from('reminder_log')
+              .delete()
+              .eq('diary_id', diary0.id)
+              .eq('reminder_date', tomorrowISO)
+              .eq('channel', 'push');
+          }
+        }
+      }
+
+      // Throttle slightly to avoid Resend rate-limit (100ms between lawyers)
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    } catch (err) {
+      // One lawyer's failure must not stop the rest
+      console.error('Reminder error for lawyer (id redacted):', (err as Error).message);
     }
+  }
 
-    // ── FCM push notification ──
-    if (fcmToken) {
-      const time = first.hearing_time ? first.hearing_time.slice(0, 5) : '';
-      const court = first.court_number
-        ? `${first.court_name} · Court ${first.court_number}`
-        : first.court_name;
-      const title = `Hearing Tomorrow${time ? ` at ${time}` : ''}`;
-      const body = lawyerHearings.length === 1
-        ? `${first.party_names} — ${court}`
-        : `${lawyerHearings.length} hearings scheduled`;
-
-      const ok = await sendFCM(fcmToken, title, body, fcmAccessToken, projectId);
-      if (ok) pushSent++;
-    }
+  // Clear stale FCM tokens in bulk
+  if (invalidTokens.length > 0) {
+    await supabase
+      .from('profiles')
+      .update({ fcm_token: null })
+      .in('id', invalidTokens);
   }
 
   return new Response(

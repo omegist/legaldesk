@@ -92,7 +92,7 @@ export default function NotificationSettings() {
                 <ChannelRow
                   icon={Mail}
                   title="Email reminders"
-                  subtitle="Sent from reminders@vakildesk.app the evening before"
+                  subtitle="Sent from reminders@vakildesks.in — the evening before your hearing"
                   checked={settings.email_enabled}
                   onCheckedChange={(v) => setSettings((s) => ({ ...s, email_enabled: v }))}
                 />
@@ -123,7 +123,7 @@ export default function NotificationSettings() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Send a reminder this many hours before each hearing (pick as many as you like):
+                  Your preferences are saved for when per-hour reminders launch. Currently, one reminder is sent the <strong>evening before</strong> each hearing.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {HOUR_OPTIONS.map((h) => {

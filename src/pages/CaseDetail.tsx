@@ -182,8 +182,8 @@ export default function CaseDetail() {
 
     const handleSyncNow = async () => {
     if (!diary) return;
-    // CNR sync costs credits — only available on paid tiers
-    if (profile?.subscription_tier === 'free') {
+    // CNR sync costs credits — block free solo users (firm members allowed via their firm's plan)
+    if (profile?.subscription_tier === 'free' && !profile?.firm_id) {
       toast({
         title: 'Upgrade required',
         description: 'CNR sync is available on Pro and above. Upgrade your plan to use this feature.',

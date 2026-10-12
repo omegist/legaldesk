@@ -52,7 +52,27 @@ Deno.serve(async (req) => {
     }
     if (!diary.cnr_number) return json({ error: 'This case has no CNR number set' }, 400);
 
-    // Court data doesn't change minute-to-minute — block repeat syncs within
+    // ── Server-side tier check — prevents direct API calls from free users ──
+    // This MUST be enforced here, not only in the React UI.
+    const { data: me } = await supabase
+      .from('profiles')
+      .select('subscription_tier, firm_id')
+      .eq('id', userData.user.id)
+      .single();
+
+    let paid = me?.subscription_tier !== 'free';
+    if (!paid && me?.firm_id && me.firm_id !== userData.user.id) {
+      // Firm member — check if the firm owner is on a paid plan
+      const { data: owner } = await supabase
+        .from('profiles')
+        .select('subscription_tier')
+        .eq('id', me.firm_id)
+        .single();
+      paid = owner?.subscription_tier === 'chambers' || owner?.subscription_tier === 'firm';
+    }
+    if (!paid) return json({ error: 'upgrade_required' }, 402);
+
+
     // 30 minutes so a double-click or impatient retry can't quietly burn
     // through paid API credits.
     const COOLDOWN_MINUTES = 30;

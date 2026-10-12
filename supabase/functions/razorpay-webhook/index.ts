@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
     .eq('id', row.id);
 
   if (subUpdateError) {
-    console.error('Failed to update subscription row:', subUpdateError);
+    console.error('Failed to update subscription row:', subUpdateError.message);
     return new Response('Internal error', { status: 500 });
   }
 
@@ -67,15 +67,32 @@ Deno.serve(async (req) => {
     const isMultiUser = row.tier === 'chambers' || row.tier === 'firm';
 
     if (isMultiUser) {
+      // Look up the owner's name to satisfy firms.name NOT NULL constraint
+      const { data: owner, error: ownerErr } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', row.user_id)
+        .single();
+
+      if (ownerErr) {
+        console.error('owner lookup failed:', ownerErr.message);
+        return new Response('Internal error', { status: 500 });
+      }
+
+      const firmName = owner?.name ? `${owner.name} Chambers` : 'My Chambers';
+
       // A firms row MUST exist before we set firm_id on the profile.
       // firm_id is a FK → firms.id, so setting firm_id = user_id without a
-      // matching row causes a FK violation and the whole update silently fails.
+      // matching row causes a FK violation and the whole update fails.
       const { error: firmError } = await supabase
         .from('firms')
-        .upsert({ id: row.user_id, owner_id: row.user_id }, { onConflict: 'id' });
+        .upsert(
+          { id: row.user_id, owner_id: row.user_id, name: firmName },
+          { onConflict: 'id' },
+        );
 
       if (firmError) {
-        console.error('Failed to upsert firms row:', firmError);
+        console.error('Failed to upsert firms row:', firmError.message);
         return new Response('Internal error', { status: 500 });
       }
     }
@@ -89,7 +106,7 @@ Deno.serve(async (req) => {
       .eq('id', row.user_id);
 
     if (profileError) {
-      console.error('Failed to update profile tier/firm_id:', profileError);
+      console.error('Failed to update profile tier/firm_id:', profileError.message);
       return new Response('Internal error', { status: 500 });
     }
   } else if (newStatus === 'halted') {
@@ -99,21 +116,30 @@ Deno.serve(async (req) => {
       .from('profiles')
       .update({ subscription_tier: 'free' })
       .eq('id', row.user_id);
-    if (error) console.error('Failed to downgrade halted subscription:', error);
+    if (error) {
+      console.error('Failed to downgrade halted subscription:', error.message);
+      return new Response('Internal error', { status: 500 });
+    }
   } else if (['cancelled', 'expired', 'completed'].includes(newStatus)) {
     // Clear firm_id for the owner AND all members
     const { error: ownerErr } = await supabase
       .from('profiles')
       .update({ subscription_tier: 'free', firm_id: null })
       .eq('id', row.user_id);
-    if (ownerErr) console.error('Failed to clear owner firm_id:', ownerErr);
+    if (ownerErr) {
+      console.error('Failed to clear owner firm_id:', ownerErr.message);
+      return new Response('Internal error', { status: 500 });
+    }
 
     const { error: membersErr } = await supabase
       .from('profiles')
       .update({ firm_id: null })
       .eq('firm_id', row.user_id)
       .neq('id', row.user_id);
-    if (membersErr) console.error('Failed to clear member firm_ids:', membersErr);
+    if (membersErr) {
+      console.error('Failed to clear member firm_ids:', membersErr.message);
+      return new Response('Internal error', { status: 500 });
+    }
   }
 
   return new Response('ok', { status: 200 });

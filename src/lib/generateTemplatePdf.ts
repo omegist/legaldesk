@@ -196,12 +196,20 @@ export interface BailApplicationData {
   advocate_enrollment: string;
   date: string;
   place: string;
+  /** 'new' = BNSS/BNS (cases from 1 July 2024+); 'old' = Cr.P.C./IPC (legacy). */
+  lawRegime: 'new' | 'old';
 }
 
 export function generateBailApplication(d: BailApplicationData, logoUrl?: string | null): Blob {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const offset = addLogo(doc, logoUrl);
-  let y = header(doc, 'APPLICATION FOR BAIL', 'Under Section 480/483 BNSS, 2023 (formerly Sec. 437/439 Cr.P.C.)', offset);
+
+  const subtitle =
+    d.lawRegime === 'new'
+      ? 'Under Section 480/483 BNSS, 2023 (Bharatiya Nagarik Suraksha Sanhita)'
+      : 'Under Section 437/439 Cr.P.C. (for matters before 1 July 2024)';
+
+  let y = header(doc, 'APPLICATION FOR BAIL', subtitle, offset);
 
   y = field(doc, 'In the Court of', d.court_name, y);
   y = field(doc, 'Case', `${d.case_type} No. ${d.case_number} / ${d.year}`, y);

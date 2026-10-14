@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
 // Which screen is showing. 'signin'/'signup' are the normal tabs;
-// 'confirm-otp' is the 6-digit signup-confirmation code; 'forgot-email' and
+// 'confirm-otp' is the 8-digit signup-confirmation code; 'forgot-email' and
 // 'forgot-otp' are the two steps of the password-reset flow.
 type View = 'signin' | 'signup' | 'confirm-otp' | 'forgot-email' | 'forgot-otp';
 
@@ -70,7 +70,7 @@ export default function Auth() {
     setIsSubmitting(true);
     // No emailRedirectTo needed anymore — with the "Confirm signup" template
     // set to show {{ .Token }} instead of a link (see setup notes), Supabase
-    // sends a 6-digit code by email instead of a clickable URL.
+    // sends an 8-digit code by email instead of a clickable URL.
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -97,14 +97,26 @@ export default function Auth() {
 
   const handleConfirmSignupOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otp.length !== 6) return;
+    if (otp.length !== 8) return;
     setIsSubmitting(true);
-    const { error } = await supabase.auth.verifyOtp({ email, token: otp, type: 'signup' });
+    const { data, error } = await supabase.auth.verifyOtp({ email, token: otp, type: 'signup' });
     setIsSubmitting(false);
 
     if (error) {
       toast({ title: 'Incorrect or expired code', description: error.message, variant: 'destructive' });
       return;
+    }
+    // Send the welcome email only after Supabase has confirmed the account.
+    // A delivery failure must not prevent the user from entering the app.
+    const accessToken = data.session?.access_token;
+    if (accessToken) {
+      void supabase.functions.invoke('send-welcome-email', {
+        // The session returned by verifyOtp is the confirmed user's current
+        // session. Passing it explicitly prevents a race with local storage.
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).then(({ error: welcomeError }) => {
+        if (welcomeError) console.error('Welcome email could not be sent');
+      });
     }
     toast({ title: 'Account confirmed', description: 'Welcome to VakilDesk.' });
     navigate('/dashboard', { replace: true });
@@ -125,7 +137,7 @@ export default function Auth() {
     e.preventDefault();
     setIsSubmitting(true);
     // With the "Reset Password" template also set to {{ .Token }}, this
-    // sends a 6-digit code by email rather than a reset link.
+    // sends an 8-digit code by email rather than a reset link.
     const { error } = await supabase.auth.resetPasswordForEmail(email);
     setIsSubmitting(false);
 
@@ -179,12 +191,12 @@ export default function Auth() {
           <Card className="glass-effect border-primary/20">
             <CardHeader className="text-center">
               <CardTitle className="font-serif text-2xl">Confirm your account</CardTitle>
-              <CardDescription>Enter the 6-digit code we sent to {email}.</CardDescription>
+              <CardDescription>Enter the 8-digit code we sent to {email}.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleConfirmSignupOtp} className="space-y-5">
                 <div className="flex justify-center">
-                  <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                  <InputOTP maxLength={8} value={otp} onChange={setOtp}>
                     <InputOTPGroup>
                       <InputOTPSlot index={0} />
                       <InputOTPSlot index={1} />
@@ -192,13 +204,15 @@ export default function Auth() {
                       <InputOTPSlot index={3} />
                       <InputOTPSlot index={4} />
                       <InputOTPSlot index={5} />
+                      <InputOTPSlot index={6} />
+                      <InputOTPSlot index={7} />
                     </InputOTPGroup>
                   </InputOTP>
                 </div>
                 <Button
                   type="submit"
                   className="w-full gold-gradient text-primary-foreground"
-                  disabled={isSubmitting || otp.length !== 6}
+                  disabled={isSubmitting || otp.length !== 8}
                 >
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm account'}
                 </Button>
@@ -265,13 +279,13 @@ export default function Auth() {
             <CardHeader className="text-center">
               <CardTitle className="font-serif text-2xl">Enter your code</CardTitle>
               <CardDescription>
-                Enter the 6-digit code sent to {email}, then choose a new password.
+                Enter the 8-digit code sent to {email}, then choose a new password.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleResetPassword} className="space-y-4">
                 <div className="flex justify-center">
-                  <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                  <InputOTP maxLength={8} value={otp} onChange={setOtp}>
                     <InputOTPGroup>
                       <InputOTPSlot index={0} />
                       <InputOTPSlot index={1} />
@@ -279,6 +293,8 @@ export default function Auth() {
                       <InputOTPSlot index={3} />
                       <InputOTPSlot index={4} />
                       <InputOTPSlot index={5} />
+                      <InputOTPSlot index={6} />
+                      <InputOTPSlot index={7} />
                     </InputOTPGroup>
                   </InputOTP>
                 </div>
@@ -298,7 +314,7 @@ export default function Auth() {
                 <Button
                   type="submit"
                   className="w-full gold-gradient text-primary-foreground"
-                  disabled={isSubmitting || otp.length !== 6}
+                  disabled={isSubmitting || otp.length !== 8}
                 >
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reset password'}
                 </Button>

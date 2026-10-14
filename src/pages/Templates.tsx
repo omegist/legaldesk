@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Header } from '@/components/layout/Header';
 import { useAuth } from '@/contexts/AuthContext';
+import { cn } from '@/lib/utils';
 import {
   generateVakalatnama, generateLegalNotice, generateBailApplication, generateAffidavit,
   type VakalatData, type LegalNoticeData, type BailApplicationData, type AffidavitData,
@@ -66,11 +67,15 @@ export default function Templates() {
   });
 
   // ── Bail Application ──
+  // Default to 'new' (BNSS) for cases registered on or after 1 July 2024
+  const defaultRegime: 'new' | 'old' =
+    new Date() >= new Date('2024-07-01') ? 'new' : 'old';
   const [bail, setBail] = useState<BailApplicationData>({
     court_name: '', case_type: 'Bail Application', case_number: '', year: new Date().getFullYear().toString(),
     accused_name: '', accused_address: '', offence: '', fir_number: '', police_station: '',
     arrest_date: '', grounds: '', surety_name: '', surety_address: '',
     advocate_name: profile?.name ?? '', advocate_enrollment: '', date: today, place: profile?.city ?? '',
+    lawRegime: defaultRegime,
   });
 
   // ── Affidavit ──
@@ -168,7 +173,40 @@ export default function Templates() {
           {/* ── BAIL APPLICATION ── */}
           <TabsContent value="bail">
             <Card className="glass-effect border-primary/20">
-              <CardHeader><CardTitle className="font-serif text-lg">Bail Application</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="font-serif text-lg">Bail Application</CardTitle>
+                {/* Law-regime selector — drives the PDF header and placeholder text */}
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-muted-foreground">Law regime:</span>
+                  <button
+                    type="button"
+                    onClick={() => setBail((s) => ({ ...s, lawRegime: 'new' }))}
+                    className={cn(
+                      'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                      bail.lawRegime === 'new'
+                        ? 'border-primary bg-primary/15 text-primary'
+                        : 'border-border/60 text-muted-foreground hover:border-primary/40',
+                    )}
+                  >
+                    BNSS / BNS (2024+)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBail((s) => ({ ...s, lawRegime: 'old' }))}
+                    className={cn(
+                      'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                      bail.lawRegime === 'old'
+                        ? 'border-primary bg-primary/15 text-primary'
+                        : 'border-border/60 text-muted-foreground hover:border-primary/40',
+                    )}
+                  >
+                    Cr.P.C. / IPC (pre-2024)
+                  </button>
+                </div>
+                <p className="text-xs text-amber-400 mt-1">
+                  ⚠ Draft only — must be reviewed by an advocate before filing.
+                </p>
+              </CardHeader>
               <CardContent className="space-y-3">
                 <F label="Court Name" id="b-court" value={bail.court_name} onChange={b('court_name')} placeholder="e.g. Sessions Court, Mumbai" />
                 <div className="grid grid-cols-3 gap-3">
@@ -178,13 +216,23 @@ export default function Templates() {
                 </div>
                 <F label="Accused Name" id="b-an" value={bail.accused_name} onChange={b('accused_name')} />
                 <TA label="Accused Address" id="b-aa" value={bail.accused_address} onChange={b('accused_address')} />
-                <F label="Offence / Sections" id="b-off" value={bail.offence} onChange={b('offence')} placeholder="e.g. IPC 302, 307" />
+                <F
+                  label="Offence / Sections"
+                  id="b-off"
+                  value={bail.offence}
+                  onChange={b('offence')}
+                  placeholder={
+                    bail.lawRegime === 'new'
+                      ? 'e.g. BNS 103, 109 (formerly IPC 302, 307)'
+                      : 'e.g. IPC 302, 307'
+                  }
+                />
                 <div className="grid grid-cols-2 gap-3">
                   <F label="FIR Number" id="b-fir" value={bail.fir_number} onChange={b('fir_number')} />
                   <F label="Police Station" id="b-ps" value={bail.police_station} onChange={b('police_station')} />
                 </div>
                 <F label="Date of Arrest" id="b-ad" value={bail.arrest_date} onChange={b('arrest_date')} type="date" />
-                <TA label="Grounds for Bail" id="b-gr" value={bail.grounds} onChange={b('grounds')} placeholder="1. The accused is not a flight risk...\n2. ..." />
+                <TA label="Grounds for Bail" id="b-gr" value={bail.grounds} onChange={b('grounds')} placeholder={"1. The accused is not a flight risk...\n2. ..."} />
                 <F label="Surety Name" id="b-sn" value={bail.surety_name} onChange={b('surety_name')} />
                 <TA label="Surety Address" id="b-sa" value={bail.surety_address} onChange={b('surety_address')} />
                 <div className="grid grid-cols-2 gap-3">

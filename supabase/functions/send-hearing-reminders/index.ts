@@ -57,16 +57,28 @@ function emailHtml(
   const settingsUrl = `${APP_URL}/settings/notifications`;
 
   return `
-    <div style="background:#0f0f0f;color:#e5e5e5;font-family:Georgia,serif;max-width:560px;margin:0 auto;padding:32px 24px;border-radius:12px;">
-      <h2 style="color:#c9a24b;margin:0 0 4px;">VakilDesk</h2>
-      <p style="color:#888;font-size:13px;margin:0 0 24px;">Hearing Reminder</p>
-      <p style="margin:0 0 16px;">Dear <strong>${esc(lawyerName)}</strong>,</p>
-      <p style="margin:0 0 20px;color:#ccc;">You have the following hearing(s) scheduled for <strong style="color:#fff;">tomorrow</strong>:</p>
-      <table style="width:100%;border-collapse:collapse;">${rows}</table>
-      <p style="margin:24px 0 0;font-size:12px;color:#555;">
-        You're receiving this because you enabled email reminders in VakilDesk.<br/>
-        Manage your preferences at <a href="${settingsUrl}" style="color:#c9a24b;">${APP_URL.replace(/^https?:\/\//, '')}/settings/notifications</a>
-      </p>
+    <div style="margin:0;padding:32px 12px;background:#090d18;font-family:Arial,Helvetica,sans-serif;color:#edf2f7;">
+      <div style="max-width:560px;margin:0 auto;background:#101827;border:1px solid #25324a;border-radius:16px;overflow:hidden;">
+        <div style="padding:28px 32px 20px;text-align:center;border-bottom:1px solid #25324a;">
+          <div style="font-family:Georgia,serif;font-size:27px;font-weight:700;color:#d9a73d;">&#9878; VakilDesk</div>
+          <div style="margin-top:7px;font-size:12px;letter-spacing:1.5px;color:#91a0b8;">LEGAL PRACTICE MANAGEMENT</div>
+        </div>
+        <div style="padding:32px;">
+          <div style="margin:0 0 9px;font-size:11px;font-weight:700;letter-spacing:1.4px;color:#d9a73d;">HEARING REMINDER</div>
+          <h1 style="margin:0 0 14px;color:#ffffff;font-family:Georgia,serif;font-size:25px;">Your hearings are tomorrow</h1>
+          <p style="margin:0 0 24px;color:#c5cfdf;font-size:16px;line-height:1.6;">Dear <strong style="color:#ffffff;">${esc(lawyerName)}</strong>, you have the following scheduled hearing${hearings.length === 1 ? '' : 's'} tomorrow.</p>
+          <div style="padding:4px 20px;background:#0a1120;border:1px solid #3b4b67;border-radius:10px;">
+            <table role="presentation" style="width:100%;border-collapse:collapse;">${rows}</table>
+          </div>
+          <div style="margin-top:24px;text-align:center;">
+            <a href="${settingsUrl}" style="display:inline-block;padding:12px 18px;background:#d9a73d;border-radius:8px;color:#101827;font-size:14px;font-weight:700;text-decoration:none;">Manage notification settings</a>
+          </div>
+          <p style="margin:24px 0 0;color:#91a0b8;font-size:13px;line-height:1.6;">You received this because hearing email reminders are enabled in VakilDesk.</p>
+        </div>
+        <div style="padding:18px 32px;background:#0a1120;border-top:1px solid #25324a;text-align:center;">
+          <p style="margin:0;color:#71809a;font-size:12px;">&copy; 2026 VakilDesk &middot; vakildesks.in</p>
+        </div>
+      </div>
     </div>`;
 }
 

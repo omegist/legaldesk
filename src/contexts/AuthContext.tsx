@@ -31,7 +31,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      // The saved browser session is validated below with getUser(). Do not
+      // trust INITIAL_SESSION because it can belong to a user deleted remotely.
+      if (event === 'INITIAL_SESSION') return;
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
@@ -44,12 +47,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data: { session: existing } }) => {
+    const validateSavedSession = async () => {
+      const { data: { session: existing } } = await supabase.auth.getSession();
+      if (!existing) {
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // getSession() reads local storage only. getUser() verifies the token
+      // with Supabase, so a deleted user cannot continue using a stale session.
+      const { data: userData, error } = await supabase.auth.getUser(existing.access_token);
+      if (error || !userData.user) {
+        await supabase.auth.signOut({ scope: 'local' });
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setIsLoading(false);
+        return;
+      }
+
       setSession(existing);
-      setUser(existing?.user ?? null);
-      if (existing?.user) loadProfile(existing.user.id);
+      setUser(userData.user);
+      await loadProfile(userData.user.id);
       setIsLoading(false);
-    });
+    };
+
+    void validateSavedSession();
 
     return () => listener.subscription.unsubscribe();
   }, [loadProfile]);

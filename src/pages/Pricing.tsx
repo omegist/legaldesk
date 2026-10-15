@@ -110,6 +110,9 @@ export default function Pricing() {
   const [subInfo, setSubInfo] = useState<{ status: string; cancel_at_period_end: boolean; current_period_end: string | null } | null>(null);
 
   const currentTier = profile?.subscription_tier ?? 'free';
+  // Paid checkout stays closed until Live Razorpay plans and secrets are
+  // configured. This prevents customers from ever seeing a test checkout.
+  const paymentsEnabled = import.meta.env.VITE_PAYMENTS_ENABLED === 'true';
 
   useEffect(() => {
     if (!user) return;
@@ -129,6 +132,11 @@ export default function Pricing() {
       return;
     }
     if (tier === currentTier) return;
+
+    if (tier !== 'free' && !paymentsEnabled) {
+      toast({ title: 'Paid subscriptions unavailable', description: 'Please continue with the Free plan for now.' });
+      return;
+    }
 
     if (tier === 'free') {
       // Downgrading from a paid plan should go through cancellation (so
@@ -229,7 +237,11 @@ export default function Pricing() {
       <main className="container max-w-5xl py-10">
         <div className="text-center mb-10">
           <h1 className="font-serif text-3xl font-bold mb-2">Plans for every chamber</h1>
-          <p className="text-muted-foreground">Simple pricing that grows with your practice. Cancel anytime.</p>
+          <p className="text-muted-foreground">
+            {paymentsEnabled
+              ? 'Simple pricing that grows with your practice. Cancel anytime.'
+              : 'Paid subscriptions are not available at this time.'}
+          </p>
         </div>
 
         {subInfo?.cancel_at_period_end && currentTier !== 'free' && (
@@ -284,13 +296,15 @@ export default function Pricing() {
                   <Button
                     className={cn('w-full', plan.highlighted && 'gold-gradient text-primary-foreground')}
                     variant={plan.highlighted ? 'default' : 'outline'}
-                    disabled={isCurrent || pendingTier === plan.tier}
+                    disabled={isCurrent || pendingTier === plan.tier || (plan.tier !== 'free' && !paymentsEnabled)}
                     onClick={() => handleSelect(plan.tier)}
                   >
                     {pendingTier === plan.tier ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : isCurrent ? (
                       'Current plan'
+                    ) : plan.tier !== 'free' && !paymentsEnabled ? (
+                      'Unavailable'
                     ) : (
                       `Choose ${plan.name}`
                     )}

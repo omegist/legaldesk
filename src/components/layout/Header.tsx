@@ -38,13 +38,10 @@ export function Header() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
 
-  const isTeamTier = profile?.subscription_tier === 'chambers' || profile?.subscription_tier === 'firm';
-  const isMember = !!profile?.firm_id && profile.firm_id !== profile.id;
-
   const baseItems = profile?.role === 'partner' ? partnerNavItems : lawyerNavItems;
-  const navItems = (isTeamTier || isMember)
-    ? [...baseItems, { label: 'Team', href: '/team', icon: Building2 }, { label: 'Calendar', href: '/calendar', icon: CalendarDays }]
-    : baseItems;
+  // Keep paid features discoverable. Routes enforce the subscription and show
+  // a clear upgrade screen instead of hiding the navigation item.
+  const navItems = [...baseItems, { label: 'Team', href: '/team', icon: Building2 }, { label: 'Calendar', href: '/calendar', icon: CalendarDays }];
 
   const handleLogout = async () => {
     await logout();

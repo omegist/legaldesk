@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Loader2, UserPlus, Users, Mail, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -27,6 +28,7 @@ interface TeamMember {
 export default function Team() {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const isOwner = !!profile?.firm_id && profile.firm_id === user?.id;
   const isMember = !!profile?.firm_id && profile.firm_id !== user?.id;
@@ -42,7 +44,9 @@ export default function Team() {
 
   // Declared after members state — safe to use members.length here
   const memberLimit = isChambers ? 2 : null;
-  const atCapacity = memberLimit !== null && members.length >= memberLimit;
+  const pendingInviteCount = invites.filter((invite) => invite.status === 'pending').length;
+  const occupiedSlots = members.length + pendingInviteCount;
+  const atCapacity = memberLimit !== null && occupiedSlots >= memberLimit;
 
   useEffect(() => {
     if (!user || !profile) return;
@@ -84,10 +88,11 @@ export default function Team() {
   async function handleInvite() {
     if (!email.trim() || !user) return;
     setIsSending(true);
+    const inviteEmail = email.trim().toLowerCase();
     const { error } = await supabase.from('firm_invites').insert({
       firm_id: user.id,
       invited_by: user.id,
-      email: email.trim().toLowerCase(),
+      email: inviteEmail,
     });
     setIsSending(false);
     if (error) {
@@ -95,7 +100,7 @@ export default function Team() {
       return;
     }
     setEmail('');
-    toast({ title: 'Invite sent', description: `${email} will see the invite when they log in.` });
+    toast({ title: 'Invite created', description: `${inviteEmail} can accept it after signing in with this email.` });
     loadOwnerData();
   }
 
@@ -140,6 +145,9 @@ export default function Team() {
           <p className="text-muted-foreground text-sm">
             Team management is available on the Chambers and Firm plans.
           </p>
+          <Button className="gold-gradient text-primary-foreground" onClick={() => navigate('/pricing')}>
+            View plans
+          </Button>
         </main>
       </div>
     );
@@ -195,7 +203,7 @@ export default function Team() {
                 </CardTitle>
                 {memberLimit !== null && (
                   <p className="text-xs text-muted-foreground">
-                    {members.length} of {memberLimit} member slots used
+                    {occupiedSlots} of {memberLimit} member slots used
                     {atCapacity && ' — upgrade to Firm plan for unlimited members'}
                   </p>
                 )}

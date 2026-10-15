@@ -10,7 +10,7 @@ interface DocumentScannerProps {
   open: boolean;
   onClose: () => void;
   /** Called with the final merged PDF file when the user taps Done. */
-  onScanComplete: (file: File) => void;
+  onScanComplete: (file: File) => Promise<void>;
   /** Optional error handler (e.g. show a toast in the parent). */
   onError?: (message: string) => void;
 }
@@ -61,6 +61,19 @@ export function DocumentScanner({ open, onClose, onScanComplete, onError }: Docu
   const [cameraError, setCameraError] = useState('');
   const [isMerging, setIsMerging] = useState(false);
 
+  // The preview video is conditionally rendered. On a second scan, React
+  // creates a new video element, so explicitly reattach the existing stream.
+  const setVideoElement = useCallback((element: HTMLVideoElement | null) => {
+    videoRef.current = element;
+    if (element && streamRef.current) {
+      element.srcObject = streamRef.current;
+      // When returning from the captured-image view the stream already has
+      // metadata. In that case `loadedmetadata` may not fire again.
+      setCameraReady(element.readyState >= HTMLMediaElement.HAVE_METADATA);
+      void element.play().catch(() => undefined);
+    }
+  }, []);
+
   // ─── Camera lifecycle ──────────────────────────────────────────────────────
 
   const startCamera = useCallback(async () => {
@@ -81,7 +94,13 @@ export function DocumentScanner({ open, onClose, onScanComplete, onError }: Docu
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => setCameraReady(true);
+        videoRef.current.onloadedmetadata = () => {
+          setCameraReady(true);
+          void videoRef.current?.play().catch(() => undefined);
+        };
+        if (videoRef.current.readyState >= HTMLMediaElement.HAVE_METADATA) {
+          setCameraReady(true);
+        }
       }
     } catch (err) {
       const msg = err instanceof Error && err.name === 'NotAllowedError'
@@ -127,6 +146,7 @@ export function DocumentScanner({ open, onClose, onScanComplete, onError }: Docu
   const handleAddPage = () => {
     setPages((prev) => [...prev, currentCapture]);
     setCurrentCapture('');
+    setCameraReady(false);
     setStep('preview');
   };
 
@@ -143,10 +163,10 @@ export function DocumentScanner({ open, onClose, onScanComplete, onError }: Docu
       const pdfBlob = imagesToPdf(allPages);
       const fileName = `scan_${new Date().toISOString().slice(0, 10)}_${allPages.length}pg.pdf`;
       const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-      onScanComplete(file);
+      await onScanComplete(file);
       onClose();
-    } catch {
-      onError?.('Could not create the PDF. Please try again.');
+    } catch (error) {
+      onError?.(error instanceof Error ? error.message : 'Could not create or upload the PDF. Please try again.');
     } finally {
       setIsMerging(false);
     }
@@ -204,7 +224,7 @@ export function DocumentScanner({ open, onClose, onScanComplete, onError }: Docu
         {step === 'preview' && (
           <>
             <video
-              ref={videoRef}
+              ref={setVideoElement}
               autoPlay
               playsInline
               muted

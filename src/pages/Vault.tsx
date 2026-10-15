@@ -54,16 +54,20 @@ export default function Vault() {
     try {
       const file = await pickImageFromCamera();
       if (file) await handleUpload(file);
-    } catch {
-      toast({ title: 'Camera scan cancelled or failed', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Camera scan failed',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsScanning(false);
     }
   };
 
   /** Called by the web DocumentScanner component with the merged PDF. */
-  const handleScanComplete = (file: File) => {
-    handleUpload(file);
+  const handleScanComplete = async (file: File) => {
+    await handleUpload(file);
   };
 
   const load = useCallback(async () => {
@@ -81,20 +85,20 @@ export default function Vault() {
   }, [load]);
 
   const handleUpload = async (file: File) => {
-    if (!user) return;
+    if (!user) throw new Error('Please sign in again before uploading a document.');
     setIsUploading(true);
     let key: string;
     try {
-      ({ key } = await uploadDocumentToR2(file));
-    } catch (uploadError) {
-      setIsUploading(false);
+      try {
+        ({ key } = await uploadDocumentToR2(file));
+      } catch (uploadError) {
       toast({
         title: 'Upload failed',
         description: uploadError instanceof Error ? uploadError.message : 'Could not upload the file.',
         variant: 'destructive',
       });
-      return;
-    }
+        throw uploadError instanceof Error ? uploadError : new Error('Could not upload the file.');
+      }
 
     // OCR / text extraction is a planned addition — ocr_text stays empty for now.
     const { error } = await supabase.from('documents').insert({
@@ -107,13 +111,16 @@ export default function Vault() {
       file_size: file.size,
     });
 
-    setIsUploading(false);
     if (error) {
       toast({ title: 'Could not save document', description: error.message, variant: 'destructive' });
-      return;
+      throw new Error(error.message);
     }
     toast({ title: 'Document stored', description: file.name });
-    load();
+    await load();
+      return true;
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const openDoc = async (doc: CaseDocument) => {
@@ -280,7 +287,7 @@ export default function Vault() {
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) handleUpload(file);
+                if (file) void handleUpload(file).catch(() => undefined);
                 e.target.value = '';
               }}
             />

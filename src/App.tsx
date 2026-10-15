@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { FeatureGate } from "@/components/auth/FeatureGate";
 import { initStatusBar, initBackButton } from "@/lib/native";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
@@ -32,6 +33,16 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const protect = (element: JSX.Element) => <ProtectedRoute>{element}</ProtectedRoute>;
+const proFeature = (element: JSX.Element, feature: string, description: string) => (
+  <ProtectedRoute>
+    <FeatureGate minimumTier="pro" feature={feature} description={description}>{element}</FeatureGate>
+  </ProtectedRoute>
+);
+const teamFeature = (element: JSX.Element, feature: string, description: string) => (
+  <ProtectedRoute>
+    <FeatureGate minimumTier="chambers" feature={feature} description={description}>{element}</FeatureGate>
+  </ProtectedRoute>
+);
 
 function NativeInit() {
   const navigate = useNavigate();
@@ -59,16 +70,18 @@ const App = () => (
             <Route path="/cases" element={protect(<Cases />)} />
             <Route path="/cases/new" element={protect(<CreateCase />)} />
             <Route path="/cases/:id" element={protect(<CaseDetail />)} />
-            <Route path="/vault" element={protect(<Vault />)} />
+            <Route path="/vault" element={proFeature(<Vault />, "Legal Vault", "Store and protect your case documents securely.")} />
             <Route path="/partners" element={protect(<Partners />)} />
-            <Route path="/settings/notifications" element={protect(<NotificationSettings />)} />
+            <Route path="/settings/notifications" element={proFeature(<NotificationSettings />, "Hearing reminders", "Set email reminders for upcoming hearings.")} />
             <Route path="/profile" element={protect(<Profile />)} />
-            <Route path="/invoices" element={protect(<Invoices />)} />
-            <Route path="/invoices/new" element={protect(<CreateInvoice />)} />
-            <Route path="/fee-ledger" element={protect(<FeeLedger />)} />
+            <Route path="/invoices" element={proFeature(<Invoices />, "Invoices", "Create and manage professional invoices for your practice.")} />
+            <Route path="/invoices/new" element={proFeature(<CreateInvoice />, "Invoices", "Create and manage professional invoices for your practice.")} />
+            <Route path="/fee-ledger" element={proFeature(<FeeLedger />, "Fee Ledger", "Track received fees and outstanding payments.")} />
             <Route path="/templates" element={protect(<Templates />)} />
+            {/* Team handles a pending invite for Free users as well, so an
+                invited colleague can accept before they inherit the plan. */}
             <Route path="/team" element={protect(<Team />)} />
-            <Route path="/calendar" element={protect(<Calendar />)} />
+            <Route path="/calendar" element={teamFeature(<Calendar />, "Shared calendar", "Coordinate hearings and matters across your chambers.")} />
             <Route path="/portal/:token" element={<ClientPortal />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

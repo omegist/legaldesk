@@ -1,0 +1,10 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# VakilDesk is a React single-page app. Serve the app shell for direct visits
+# to protected routes such as /dashboard and /profile.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

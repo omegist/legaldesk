@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Save, Camera } from 'lucide-react';
+import { Loader2, Save, Camera, Download, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,10 @@ export default function Profile() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isExportingData, setIsExportingData] = useState(false);
+  const [isRequestingDeletion, setIsRequestingDeletion] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
 
   const AVATAR_BUCKET = 'avatars';
 
@@ -172,6 +176,52 @@ export default function Profile() {
     toast({ title: 'Profile updated' });
   };
 
+  const handleExportData = async () => {
+    setIsExportingData(true);
+    const { data, error } = await supabase.functions.invoke('export-my-data');
+    setIsExportingData(false);
+    if (error || !data) {
+      toast({ title: 'Could not export data', description: 'Please try again or contact support.', variant: 'destructive' });
+      return;
+    }
+    const file = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `vakildesk-data-export-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Data export downloaded', description: 'Download your Vault files separately before requesting deletion.' });
+  };
+
+  const handleDeletionRequest = async () => {
+    if (!window.confirm('Request account deletion? Download your data and Vault files first. This request will be reviewed before permanent deletion.')) return;
+    setIsRequestingDeletion(true);
+    const { error } = await supabase.functions.invoke('request-account-deletion');
+    setIsRequestingDeletion(false);
+    if (error) {
+      toast({ title: 'Could not submit request', description: 'Please try again or contact support.', variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Deletion request submitted', description: 'Your request is recorded for review. Keep a copy of your export and Vault files.' });
+  };
+
+  const handleFeedback = async () => {
+    if (feedback.trim().length < 3) {
+      toast({ title: 'Add a little more detail', description: 'Feedback must be at least 3 characters.', variant: 'destructive' });
+      return;
+    }
+    setIsSubmittingFeedback(true);
+    const { error } = await supabase.functions.invoke('submit-feedback', { body: { message: feedback } });
+    setIsSubmittingFeedback(false);
+    if (error) {
+      toast({ title: 'Could not submit feedback', description: 'Please try again later.', variant: 'destructive' });
+      return;
+    }
+    setFeedback('');
+    toast({ title: 'Thank you', description: 'Your feedback has been sent to the VakilDesk team.' });
+  };
+
   if (isLoading || !profile) {
     return (
       <div className="min-h-screen bg-background legal-pattern">
@@ -262,6 +312,25 @@ export default function Profile() {
           </CardContent>
         </Card>
 
+        <Card className="glass-effect border-primary/20">
+          <CardHeader>
+            <CardTitle className="font-serif text-lg">Share feedback</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Textarea
+              value={feedback}
+              onChange={(event) => setFeedback(event.target.value)}
+              maxLength={2000}
+              placeholder="What should VakilDesk improve? Please do not include confidential case details."
+              className="bg-secondary/50"
+            />
+            <Button variant="outline" className="w-full" onClick={handleFeedback} disabled={isSubmittingFeedback || feedback.trim().length < 3}>
+              {isSubmittingFeedback ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Send feedback
+            </Button>
+          </CardContent>
+        </Card>
+
         {profile.role === 'lawyer' && (
           <Card className="glass-effect border-primary/20">
             <CardHeader>
@@ -313,6 +382,26 @@ export default function Profile() {
             </>
           )}
         </Button>
+
+        <Card className="glass-effect border-primary/20">
+          <CardHeader>
+            <CardTitle className="font-serif text-lg">Data &amp; privacy</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">Download your account data at any time. Your export includes case, billing and document metadata; download original Vault files separately.</p>
+            <Button variant="outline" className="w-full" onClick={handleExportData} disabled={isExportingData}>
+              {isExportingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+              Download my data
+            </Button>
+            <div className="border-t border-destructive/30 pt-4">
+              <p className="mb-3 text-sm text-muted-foreground">Account deletion requests are reviewed to protect active matters, invoices and team records. Export your data first.</p>
+              <Button variant="destructive" className="w-full" onClick={handleDeletionRequest} disabled={isRequestingDeletion}>
+                {isRequestingDeletion ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                Request account deletion
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );

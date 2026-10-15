@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { trackProductEvent } from '@/lib/analytics';
 import type { SubscriptionTier } from '@/types';
 
 declare global {
@@ -53,7 +54,7 @@ const PLANS: Plan[] = [
     features: [
       'Unlimited cases',
       'Email hearing reminders',
-      'WhatsApp reminders (coming soon)',
+      'In-app and email hearing reminders',
       'Cloud document vault',
       'Priority support',
     ],
@@ -140,6 +141,7 @@ export default function Pricing() {
     }
 
     setPendingTier(tier);
+    trackProductEvent('checkout_started');
     const scriptLoaded = await loadRazorpayScript();
     if (!scriptLoaded) {
       setPendingTier(null);
@@ -174,6 +176,7 @@ export default function Pricing() {
       theme: { color: '#c9a24b' },
       prefill: { email: profile?.email, contact: profile?.phone ?? undefined },
       handler: async () => {
+        trackProductEvent('checkout_completed');
         toast({
           title: 'Payment received',
           description: 'Activating your plan — this takes a few seconds.',

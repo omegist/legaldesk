@@ -96,6 +96,7 @@ export default function NotificationSettings() {
                   checked={settings.email_enabled}
                   onCheckedChange={(v) => setSettings((s) => ({ ...s, email_enabled: v }))}
                 />
+                {false && (
                 <ChannelRow
                   icon={MessageCircle}
                   title="WhatsApp reminders"
@@ -103,6 +104,8 @@ export default function NotificationSettings() {
                   checked={settings.whatsapp_enabled}
                   onCheckedChange={(v) => setSettings((s) => ({ ...s, whatsapp_enabled: v }))}
                 />
+                )}
+                {false && (
                 <ChannelRow
                   icon={Smartphone}
                   title="SMS reminders"
@@ -110,10 +113,11 @@ export default function NotificationSettings() {
                   checked={settings.sms_enabled}
                   onCheckedChange={(v) => setSettings((s) => ({ ...s, sms_enabled: v }))}
                 />
+                )}
               </CardContent>
             </Card>
 
-            <p className="text-xs text-muted-foreground px-1">
+            <p className="hidden text-xs text-muted-foreground px-1">
               WhatsApp and SMS delivery will be enabled in a future update. Your preferences are saved.
             </p>
 

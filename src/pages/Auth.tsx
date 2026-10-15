@@ -11,6 +11,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { trackProductEvent } from '@/lib/analytics';
 
 // Which screen is showing. 'signin'/'signup' are the normal tabs;
 // 'confirm-otp' is the 8-digit signup-confirmation code; 'forgot-email' and
@@ -32,12 +33,27 @@ export default function Auth() {
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // This is only a safe fallback for a legacy recovery email that still
+  // contains a confirmation link. The supported production flow is the
+  // 8-digit OTP sent by the Reset Password template.
+  const [hasRecoveryLink, setHasRecoveryLink] = useState(() => {
+    const query = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    return query.get('recovery') === '1' || hash.get('type') === 'recovery';
+  });
 
   const from = (location.state as { from?: string } | null)?.from ?? '/dashboard';
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated) navigate(from, { replace: true });
-  }, [authLoading, isAuthenticated, navigate, from]);
+    if (!authLoading && isAuthenticated && !hasRecoveryLink) navigate(from, { replace: true });
+  }, [authLoading, isAuthenticated, hasRecoveryLink, navigate, from]);
+
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setHasRecoveryLink(true);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,6 +125,7 @@ export default function Auth() {
     // Send the welcome email only after Supabase has confirmed the account.
     // A delivery failure must not prevent the user from entering the app.
     const accessToken = data.session?.access_token;
+    trackProductEvent('signup_confirmed', accessToken);
     if (accessToken) {
       void supabase.functions.invoke('send-welcome-email', {
         // The session returned by verifyOtp is the confirmed user's current
@@ -138,7 +155,12 @@ export default function Auth() {
     setIsSubmitting(true);
     // With the "Reset Password" template also set to {{ .Token }}, this
     // sends an 8-digit code by email rather than a reset link.
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      // Used only if a legacy link-based template is accidentally restored.
+      // It keeps the user on the reset screen instead of sending them straight
+      // into the dashboard with a temporary recovery session.
+      redirectTo: `${window.location.origin}/auth?recovery=1`,
+    });
     setIsSubmitting(false);
 
     // Deliberately show success even if the email doesn't exist — same
@@ -174,6 +196,26 @@ export default function Auth() {
       return;
     }
     toast({ title: 'Password updated', description: "You're signed in with your new password." });
+    trackProductEvent('password_reset_completed');
+    navigate('/dashboard', { replace: true });
+  };
+
+  const handleRecoveryLinkPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      toast({ title: 'Weak password', description: 'Please use at least 8 characters.', variant: 'destructive' });
+      return;
+    }
+    setIsSubmitting(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setIsSubmitting(false);
+    if (error) {
+      toast({ title: 'Could not set new password', description: error.message, variant: 'destructive' });
+      return;
+    }
+    window.history.replaceState({}, document.title, '/auth');
+    setHasRecoveryLink(false);
+    toast({ title: 'Password updated', description: 'You can now use your new password.' });
     navigate('/dashboard', { replace: true });
   };
 
@@ -187,7 +229,34 @@ export default function Auth() {
           </Link>
         </div>
 
-        {view === 'confirm-otp' ? (
+        {hasRecoveryLink ? (
+          <Card className="glass-effect border-primary/20">
+            <CardHeader className="text-center">
+              <CardTitle className="font-serif text-2xl">Choose a new password</CardTitle>
+              <CardDescription>Set a new password for your VakilDesk account.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleRecoveryLinkPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="recovery-link-password">New password</Label>
+                  <Input
+                    id="recovery-link-password"
+                    type="password"
+                    required
+                    autoComplete="new-password"
+                    placeholder="At least 8 characters"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="bg-secondary/50"
+                  />
+                </div>
+                <Button type="submit" className="w-full gold-gradient text-primary-foreground" disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Set new password'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        ) : view === 'confirm-otp' ? (
           <Card className="glass-effect border-primary/20">
             <CardHeader className="text-center">
               <CardTitle className="font-serif text-2xl">Confirm your account</CardTitle>

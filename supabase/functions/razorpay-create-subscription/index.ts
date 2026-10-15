@@ -46,7 +46,6 @@ Deno.serve(async (req) => {
     if (existing) return json({ error: 'You already have a subscription in progress or active.' }, 409);
 
     const auth = 'Basic ' + btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`);
-        console.log('Attempting subscription with planId:', planId, 'keyId starts with:', RAZORPAY_KEY_ID.slice(0, 12));
     const rpRes = await fetch('https://api.razorpay.com/v1/subscriptions', {
       method: 'POST',
       headers: { Authorization: auth, 'Content-Type': 'application/json' },

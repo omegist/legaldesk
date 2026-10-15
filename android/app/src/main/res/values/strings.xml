@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">VakilDesk</string>
     <string name="title_activity_main">VakilDesk</string>
-    <string name="package_name">com.vakildesk.app</string>
-    <string name="custom_url_scheme">com.vakildesk.app</string>
+    <string name="package_name">in.vakildesks.app</string>
+    <string name="custom_url_scheme">in.vakildesks.app</string>
 </resources>

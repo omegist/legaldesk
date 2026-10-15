@@ -29,6 +29,8 @@ import ClientPortal from "./pages/ClientPortal";
 import Team from "./pages/Team";
 import Calendar from "./pages/Calendar";
 import NotFound from "./pages/NotFound";
+import Privacy from "./pages/Privacy";
+import DeleteAccount from "./pages/DeleteAccount";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +68,8 @@ const App = () => (
             <Route path="/" element={<Home />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/pricing" element={<Pricing />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/delete-account" element={<DeleteAccount />} />
             <Route path="/dashboard" element={protect(<Dashboard />)} />
             <Route path="/cases" element={protect(<Cases />)} />
             <Route path="/cases/new" element={protect(<CreateCase />)} />

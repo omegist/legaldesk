@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { trackProductEvent } from '@/lib/analytics';
+import { isNative } from '@/lib/native';
 import type { SubscriptionTier } from '@/types';
 
 declare global {
@@ -112,7 +113,10 @@ export default function Pricing() {
   const currentTier = profile?.subscription_tier ?? 'free';
   // Paid checkout stays closed until Live Razorpay plans and secrets are
   // configured. This prevents customers from ever seeing a test checkout.
-  const paymentsEnabled = import.meta.env.VITE_PAYMENTS_ENABLED === 'true';
+  // Digital subscriptions in the Android app will use Google Play Billing.
+  // Razorpay remains available only in the web app, so an Android build never
+  // sends a customer to an external checkout from inside the app.
+  const paymentsEnabled = import.meta.env.VITE_PAYMENTS_ENABLED === 'true' && !isNative;
 
   useEffect(() => {
     if (!user) return;
@@ -143,7 +147,12 @@ export default function Pricing() {
     }
 
     if (tier !== 'free' && !paymentsEnabled) {
-      toast({ title: 'Paid subscriptions unavailable', description: 'Please continue with the Free plan for now.' });
+      toast({
+        title: isNative ? 'Google Play subscriptions coming soon' : 'Paid subscriptions unavailable',
+        description: isNative
+          ? 'Subscriptions will be available directly through Google Play.'
+          : 'Please continue with the Free plan for now.',
+      });
       return;
     }
 
@@ -247,7 +256,9 @@ export default function Pricing() {
         <div className="text-center mb-10">
           <h1 className="font-serif text-3xl font-bold mb-2">Plans for every chamber</h1>
           <p className="text-muted-foreground">
-            {paymentsEnabled
+            {isNative
+              ? 'Google Play subscriptions are being prepared. Existing subscribers keep their access.'
+              : paymentsEnabled
               ? 'Simple pricing that grows with your practice. Cancel anytime.'
               : 'Paid subscriptions are not available at this time.'}
           </p>
@@ -273,7 +284,8 @@ export default function Pricing() {
               && plan.tier !== 'free'
               && !!subInfo
               && ['created', 'authenticated', 'active', 'pending', 'halted'].includes(subInfo.status)
-              && !subInfo.cancel_at_period_end;
+              && !subInfo.cancel_at_period_end
+              && !isNative;
             const mustCancelCurrentPlan = currentTier !== 'free' && plan.tier !== 'free' && !isCurrent;
             return (
               <Card
@@ -320,7 +332,7 @@ export default function Pricing() {
                     ) : mustCancelCurrentPlan ? (
                       'Cancel current plan first'
                     ) : plan.tier !== 'free' && !paymentsEnabled ? (
-                      'Unavailable'
+                      isNative ? 'Available soon on Google Play' : 'Unavailable'
                     ) : (
                       `Choose ${plan.name}`
                     )}

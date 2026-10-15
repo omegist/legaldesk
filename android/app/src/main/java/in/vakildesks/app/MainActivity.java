@@ -1,4 +1,4 @@
-package com.vakildesk.app;
+package in.vakildesks.app;
 
 import com.getcapacitor.BridgeActivity;
 

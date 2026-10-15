@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.vakildesk.app',
+  appId: 'in.vakildesks.app',
   appName: 'VakilDesk',
   webDir: 'dist',
   android: {

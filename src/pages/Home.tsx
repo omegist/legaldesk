@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Scale, Shield, Users, BookOpen, Clock, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -106,6 +106,10 @@ export default function Home() {
             <p className="text-muted-foreground max-w-2xl mx-auto">
               Every feature designed with practicing lawyers in mind
             </p>
+            <div className="flex gap-4 text-sm text-muted-foreground">
+              <Link to="/privacy" className="hover:text-primary">Privacy</Link>
+              <Link to="/delete-account" className="hover:text-primary">Delete account</Link>
+            </div>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

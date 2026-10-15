@@ -269,7 +269,11 @@ export default function Pricing() {
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {PLANS.map((plan) => {
             const isCurrent = plan.tier === currentTier;
-            const canCancel = isCurrent && plan.tier !== 'free' && !subInfo?.cancel_at_period_end;
+            const canCancel = isCurrent
+              && plan.tier !== 'free'
+              && !!subInfo
+              && ['created', 'authenticated', 'active', 'pending', 'halted'].includes(subInfo.status)
+              && !subInfo.cancel_at_period_end;
             const mustCancelCurrentPlan = currentTier !== 'free' && plan.tier !== 'free' && !isCurrent;
             return (
               <Card

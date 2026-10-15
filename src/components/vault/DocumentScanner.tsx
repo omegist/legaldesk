@@ -66,11 +66,19 @@ export function DocumentScanner({ open, onClose, onScanComplete, onError }: Docu
   const setVideoElement = useCallback((element: HTMLVideoElement | null) => {
     videoRef.current = element;
     if (element && streamRef.current) {
+      const markCameraReady = () => {
+        setCameraReady(true);
+        void element.play().catch(() => undefined);
+      };
+      // A fresh video element is created after Add Page. Attach readiness
+      // handlers to that new element as well, otherwise Android can keep the
+      // loading overlay visible even though the old camera stream is active.
+      element.onloadedmetadata = markCameraReady;
+      element.oncanplay = markCameraReady;
       element.srcObject = streamRef.current;
       // When returning from the captured-image view the stream already has
       // metadata. In that case `loadedmetadata` may not fire again.
-      setCameraReady(element.readyState >= HTMLMediaElement.HAVE_METADATA);
-      void element.play().catch(() => undefined);
+      if (element.readyState >= HTMLMediaElement.HAVE_METADATA) markCameraReady();
     }
   }, []);
 

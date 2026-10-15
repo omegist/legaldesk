@@ -181,7 +181,11 @@ export default function Profile() {
     const { data, error } = await supabase.functions.invoke('export-my-data');
     setIsExportingData(false);
     if (error || !data) {
-      toast({ title: 'Could not export data', description: 'Please try again or contact support.', variant: 'destructive' });
+      toast({
+        title: 'Could not export data',
+        description: error?.message || 'Please try again or contact support.',
+        variant: 'destructive',
+      });
       return;
     }
     const file = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

@@ -133,6 +133,15 @@ export default function Pricing() {
     }
     if (tier === currentTier) return;
 
+    if (tier !== 'free' && currentTier !== 'free') {
+      toast({
+        title: 'Cancel your current plan first',
+        description: 'Plan changes are available after the current subscription has fully ended.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (tier !== 'free' && !paymentsEnabled) {
       toast({ title: 'Paid subscriptions unavailable', description: 'Please continue with the Free plan for now.' });
       return;
@@ -261,6 +270,7 @@ export default function Pricing() {
           {PLANS.map((plan) => {
             const isCurrent = plan.tier === currentTier;
             const canCancel = isCurrent && plan.tier !== 'free' && !subInfo?.cancel_at_period_end;
+            const mustCancelCurrentPlan = currentTier !== 'free' && plan.tier !== 'free' && !isCurrent;
             return (
               <Card
                 key={plan.tier}
@@ -296,13 +306,15 @@ export default function Pricing() {
                   <Button
                     className={cn('w-full', plan.highlighted && 'gold-gradient text-primary-foreground')}
                     variant={plan.highlighted ? 'default' : 'outline'}
-                    disabled={isCurrent || pendingTier === plan.tier || (plan.tier !== 'free' && !paymentsEnabled)}
+                    disabled={isCurrent || mustCancelCurrentPlan || pendingTier === plan.tier || (plan.tier !== 'free' && !paymentsEnabled)}
                     onClick={() => handleSelect(plan.tier)}
                   >
                     {pendingTier === plan.tier ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : isCurrent ? (
                       'Current plan'
+                    ) : mustCancelCurrentPlan ? (
+                      'Cancel current plan first'
                     ) : plan.tier !== 'free' && !paymentsEnabled ? (
                       'Unavailable'
                     ) : (

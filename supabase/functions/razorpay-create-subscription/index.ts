@@ -34,6 +34,19 @@ Deno.serve(async (req) => {
     const { tier } = await req.json();
     if (!['pro', 'chambers', 'firm'].includes(tier)) return json({ error: 'Invalid tier' }, 400);
 
+    // A user must finish cancellation and return to Free before starting a
+    // different subscription. This is checked server-side as well as in the
+    // UI, so a browser request cannot create overlapping mandates.
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('subscription_tier, firm_id')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (profileError || !profile) return json({ error: 'Could not verify your current plan.' }, 500);
+    if (profile.subscription_tier !== 'free' || (profile.firm_id && profile.firm_id !== user.id)) {
+      return json({ error: 'You already have plan access. Cancel your current subscription before choosing a different plan.' }, 409);
+    }
+
     const planId = PLAN_IDS[tier];
     if (!planId) return json({ error: `No Razorpay plan configured for tier "${tier}"` }, 500);
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, FileText, ScrollText, Scale, BookOpen } from 'lucide-react';
+import { Download, FileText, ScrollText, Scale, BookOpen, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Header } from '@/components/layout/Header';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import { deliverFile } from '@/lib/fileExport';
+import { saveGeneratedPdfToVault } from '@/lib/generatedDocuments';
 import { cn } from '@/lib/utils';
 import {
   generateVakalatnama, generateLegalNotice, generateBailApplication, generateAffidavit,
@@ -38,17 +41,55 @@ function TA({ label, id, value, onChange, placeholder }: {
   );
 }
 
-function download(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = name; a.click();
-  URL.revokeObjectURL(url);
-}
-
 const today = new Date().toISOString().slice(0, 10);
 
 export default function Templates() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
+  const { toast } = useToast();
+  const [isExporting, setIsExporting] = useState(false);
+
+  const download = async (blob: Blob, fileName: string) => {
+    setIsExporting(true);
+    let vaultSaveError: string | null = null;
+    const isPaid = Boolean(profile && (
+      profile.subscription_tier !== 'free'
+      || (profile.firm_id && profile.firm_id !== user?.id)
+    ));
+
+    if (isPaid && user) {
+      try {
+        await saveGeneratedPdfToVault(blob, fileName, user.id);
+      } catch (error) {
+        vaultSaveError = error instanceof Error ? error.message : 'Could not save a copy in your Legal Vault.';
+      }
+    }
+
+    try {
+      await deliverFile(blob, fileName, 'Open or save document');
+      if (vaultSaveError) {
+        toast({
+          title: 'PDF ready, but not saved to Vault',
+          description: vaultSaveError,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: isPaid ? 'PDF saved to Legal Vault' : 'PDF ready',
+          description: isPaid
+            ? 'The PDF is in Legal Vault under Filed Plaints. Use the Android chooser to open or save a copy.'
+            : 'Use the Android chooser to open or save your PDF.',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Could not export PDF',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   // ── Vakalatnama ──
   const [vak, setVak] = useState<VakalatData>({
@@ -131,8 +172,8 @@ export default function Templates() {
                   <F label="Date" id="v-dt" value={vak.date} onChange={v('date')} type="date" />
                   <F label="Place" id="v-pl" value={vak.place} onChange={v('place')} />
                 </div>
-                <Button className="w-full gold-gradient text-primary-foreground" onClick={() => download(generateVakalatnama(vak, profile?.firm_logo_url), 'Vakalatnama.pdf')}>
-                  <Download className="mr-2 h-4 w-4" /> Download PDF
+                <Button disabled={isExporting} className="w-full gold-gradient text-primary-foreground" onClick={() => void download(generateVakalatnama(vak, profile?.firm_logo_url), 'Vakalatnama.pdf')}>
+                  {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} Download PDF
                 </Button>
               </CardContent>
             </Card>
@@ -163,8 +204,8 @@ export default function Templates() {
                   <F label="Date" id="n-dt" value={notice.date} onChange={n('date')} type="date" />
                   <F label="Place" id="n-pl" value={notice.place} onChange={n('place')} />
                 </div>
-                <Button className="w-full gold-gradient text-primary-foreground" onClick={() => download(generateLegalNotice(notice, profile?.firm_logo_url), 'Legal-Notice.pdf')}>
-                  <Download className="mr-2 h-4 w-4" /> Download PDF
+                <Button disabled={isExporting} className="w-full gold-gradient text-primary-foreground" onClick={() => void download(generateLegalNotice(notice, profile?.firm_logo_url), 'Legal-Notice.pdf')}>
+                  {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} Download PDF
                 </Button>
               </CardContent>
             </Card>
@@ -243,8 +284,8 @@ export default function Templates() {
                   <F label="Date" id="b-dt" value={bail.date} onChange={b('date')} type="date" />
                   <F label="Place" id="b-pl" value={bail.place} onChange={b('place')} />
                 </div>
-                <Button className="w-full gold-gradient text-primary-foreground" onClick={() => download(generateBailApplication(bail, profile?.firm_logo_url), 'Bail-Application.pdf')}>
-                  <Download className="mr-2 h-4 w-4" /> Download PDF
+                <Button disabled={isExporting} className="w-full gold-gradient text-primary-foreground" onClick={() => void download(generateBailApplication(bail, profile?.firm_logo_url), 'Bail-Application.pdf')}>
+                  {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} Download PDF
                 </Button>
               </CardContent>
             </Card>
@@ -269,8 +310,8 @@ export default function Templates() {
                   <F label="Date" id="a-dt" value={aff.date} onChange={a('date')} type="date" />
                   <F label="Place" id="a-pl" value={aff.place} onChange={a('place')} />
                 </div>
-                <Button className="w-full gold-gradient text-primary-foreground" onClick={() => download(generateAffidavit(aff, profile?.firm_logo_url), 'Affidavit-Draft.pdf')}>
-                  <Download className="mr-2 h-4 w-4" /> Download Draft PDF
+                <Button disabled={isExporting} className="w-full gold-gradient text-primary-foreground" onClick={() => void download(generateAffidavit(aff, profile?.firm_logo_url), 'Affidavit-Draft.pdf')}>
+                  {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} Download Draft PDF
                 </Button>
               </CardContent>
             </Card>

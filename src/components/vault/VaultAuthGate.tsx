@@ -160,7 +160,7 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
           )}
 
           {/* ── REGISTER: confirm account password before PIN ── */}
-          {mode === 'register' && step === 'pin-password' && (
+          {(mode === 'register' || mode === 'verify') && step === 'pin-password' && (
             <div className="flex flex-col gap-4">
               <p className="text-sm text-muted-foreground text-center">
                 Enter your VakilDesk account password to confirm your identity before setting a PIN.
@@ -190,7 +190,7 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
           )}
 
           {/* ── REGISTER: enter new PIN ── */}
-          {mode === 'register' && step === 'pin-set' && (
+          {(mode === 'register' || mode === 'verify') && step === 'pin-set' && (
             <div className="flex flex-col items-center gap-4">
               <p className="text-sm text-muted-foreground">Enter a new 6-digit PIN</p>
               <InputOTP maxLength={6} value={pin} onChange={(v) => { setPin(v); setPinError(''); }}>
@@ -209,7 +209,7 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
           )}
 
           {/* ── REGISTER: confirm PIN ── */}
-          {mode === 'register' && step === 'pin-confirm' && (
+          {(mode === 'register' || mode === 'verify') && step === 'pin-confirm' && (
             <div className="flex flex-col items-center gap-4">
               <p className="text-sm text-muted-foreground">Confirm your PIN</p>
               <InputOTP maxLength={6} value={confirmPin} onChange={(v) => { setConfirmPin(v); setPinError(''); }}>
@@ -275,6 +275,18 @@ export function VaultAuthGate({ open, onAuthenticated, onCancel, mode, auth }: V
                     Unlock with PIN
                   </Button>
                 </div>
+              )}
+
+              {!auth.hasPin && (
+                <Button
+                  variant="outline"
+                  className="w-full border-primary/30"
+                  onClick={() => { setPinError(''); setStep('pin-password'); }}
+                  disabled={isLoading}
+                >
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  Set up a PIN with account password
+                </Button>
               )}
 
               {/* Neither biometric nor PIN set up yet */}

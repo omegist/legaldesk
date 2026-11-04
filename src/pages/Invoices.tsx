@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { generateInvoicePdf } from '@/lib/generateInvoicePdf';
 import { cn } from '@/lib/utils';
+import { deliverFile } from '@/lib/fileExport';
 
 interface Invoice {
   id: string;
@@ -76,9 +77,10 @@ export default function Invoices() {
     .filter((inv) => inv.status === 'sent' || inv.status === 'overdue')
     .reduce((sum, inv) => sum + inv.total_amount, 0);
 
-  const handleDownload = (inv: Invoice) => {
+  const handleDownload = async (inv: Invoice) => {
     if (!profile) return;
-    const blob = generateInvoicePdf(
+    try {
+      const blob = generateInvoicePdf(
       {
         invoice_number: inv.invoice_number,
         client_name: inv.client_name,
@@ -95,13 +97,15 @@ export default function Invoices() {
         notes: null,
       },
       { name: profile.name, email: profile.email, phone: profile.phone, firm_logo_url: profile.firm_logo_url },
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${inv.invoice_number}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+      );
+      await deliverFile(blob, `${inv.invoice_number}.pdf`, 'Open or save invoice');
+    } catch (error) {
+      toast({
+        title: 'Could not export invoice PDF',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleStatusChange = async (inv: Invoice, status: string) => {

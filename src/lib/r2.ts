@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { deliverFile } from '@/lib/fileExport';
 
 const workerUrl = import.meta.env.VITE_R2_WORKER_URL?.replace(/\/$/, '');
 
@@ -28,9 +29,9 @@ export async function uploadDocumentToR2(file: File) {
 export async function openDocumentFromR2(key: string) {
   const download = await authorizedRequest(`/objects?key=${encodeURIComponent(key)}`);
   if (!download.ok) throw new Error((await download.text()) || 'Could not open the document.');
-  const objectUrl = URL.createObjectURL(await download.blob());
-  window.open(objectUrl, '_blank', 'noopener');
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  const storedName = key.split('/').pop() ?? 'document';
+  const fileName = storedName.replace(/^[0-9a-f-]{36}-/i, '') || 'document';
+  await deliverFile(await download.blob(), fileName, 'Open or share document');
 }
 
 export async function deleteDocumentFromR2(key: string) {

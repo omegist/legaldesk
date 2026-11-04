@@ -11,7 +11,7 @@
 		}
 	],
 	"vars": {
-		"ALLOWED_ORIGINS": "http://localhost:5173,https://vakildesks.netlify.app,https://vakildesks.in"
+		"ALLOWED_ORIGINS": "http://localhost:5173,https://localhost,http://localhost,capacitor://localhost,https://vakildesks.netlify.app,https://vakildesks.in"
 	},
 	"observability": {
 		"enabled": true,

@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { generateInvoicePdf } from '@/lib/generateInvoicePdf';
+import { deliverFile } from '@/lib/fileExport';
 import type { Diary } from '@/types';
 
 export default function CreateInvoice() {
@@ -104,9 +105,10 @@ export default function CreateInvoice() {
     navigate('/invoices');
   };
 
-  const handlePreviewPdf = () => {
+  const handlePreviewPdf = async () => {
     if (!profile) return;
-    const blob = generateInvoicePdf(
+    try {
+      const blob = generateInvoicePdf(
       {
         invoice_number: 'DRAFT',
         client_name: form.client_name || 'Client name',
@@ -123,9 +125,15 @@ export default function CreateInvoice() {
         notes: form.notes || null,
       },
       { name: profile.name, email: profile.email, phone: profile.phone, firm_logo_url: profile.firm_logo_url },
-    );
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank');
+      );
+      await deliverFile(blob, 'Invoice-Preview.pdf', 'Open or save invoice preview');
+    } catch (error) {
+      toast({
+        title: 'Could not export invoice PDF',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (

@@ -1,0 +1,21 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "vakildesk-storage",
+	"main": "src/index.ts",
+	"workers_dev": true,
+	"compatibility_date": "2026-09-18",
+	"r2_buckets": [
+		{
+			"binding": "DOCUMENTS",
+			"bucket_name": "legal-diary-vault"
+		}
+	],
+	"vars": {
+		"ALLOWED_ORIGINS": "http://localhost:5173,https://localhost,http://localhost,capacitor://localhost,https://vakildesks.netlify.app,https://vakildesks.in"
+	},
+	"observability": {
+		"enabled": true,
+		"logs": { "enabled": true, "head_sampling_rate": 1 },
+		"traces": { "enabled": true, "head_sampling_rate": 0.1 }
+	}
+}

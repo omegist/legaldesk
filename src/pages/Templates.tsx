@@ -122,7 +122,10 @@ export default function Templates() {
   // ── Affidavit ──
   const [aff, setAff] = useState<AffidavitData>({
     deponent_name: '', deponent_father_name: '', deponent_relation: '', deponent_age: '', deponent_address: '', deponent_occupation: '',
+    deponent_id_proof: '',
     statements: '', court_name: '', case_number: '', case_title: '', paper_mode: 'court',
+    advocate_name: profile?.name ?? '', advocate_enrollment: '',
+    include_vernacular_clause: false, vernacular_language: 'Marathi',
     place: profile?.city ?? '', date: today,
   });
 
@@ -299,7 +302,7 @@ export default function Templates() {
                 <CardTitle className="font-serif text-lg">Affidavit</CardTitle>
                 <p className="text-xs text-amber-400 mt-1">⚠ Draft only — have the filing court or authorised officer confirm the execution requirements before use.</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Generates a clean white A4 affidavit. It never reproduces a government stamp, e-SBTR, franking impression or notarial seal.
+                  Generates a clean white A4 affidavit with court-compliant 38 mm left margin. It never reproduces a government stamp, e-SBTR, franking impression or notarial seal.
                 </p>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -354,15 +357,44 @@ export default function Templates() {
                   <F label="Age" id="a-age" value={aff.deponent_age} onChange={a('deponent_age')} type="number" />
                   <F label="Occupation" id="a-occ" value={aff.deponent_occupation} onChange={a('deponent_occupation')} />
                 </div>
+                <F label="Deponent ID Proof (optional)" id="a-id" value={aff.deponent_id_proof ?? ''} onChange={a('deponent_id_proof')} placeholder="e.g. Aadhaar ending 4589 / PAN ABCPD1234E" />
                 <TA label="Deponent Address" id="a-addr" value={aff.deponent_address} onChange={a('deponent_address')} />
                 <TA label="Statements / Declarations (one per line)" id="a-stmt" value={aff.statements} onChange={a('statements')} placeholder={"I am the deponent herein and am well conversant with the facts.\nThe facts stated herein are true to the best of my knowledge.\nI have not concealed any material facts."} />
                 <p className="-mt-1 text-[11px] text-muted-foreground">
                   For any statement based on information or belief, include its source in that statement.
                 </p>
+
+                {/* Advocate identification */}
+                <div className="grid grid-cols-2 gap-3">
+                  <F label="Identifying Advocate Name" id="a-adv" value={aff.advocate_name ?? ''} onChange={a('advocate_name')} placeholder={profile?.name ?? 'Advocate name'} />
+                  <F label="Bar Enrollment No." id="a-enr" value={aff.advocate_enrollment ?? ''} onChange={a('advocate_enrollment')} placeholder="e.g. MAH/1234/2020" />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <F label="Date" id="a-dt" value={aff.date} onChange={a('date')} type="date" />
                   <F label="Place" id="a-pl" value={aff.place} onChange={a('place')} />
                 </div>
+
+                {/* Vernacular explanation clause toggle */}
+                <div className="flex items-start gap-2 pt-1">
+                  <input
+                    id="a-vernacular"
+                    type="checkbox"
+                    checked={aff.include_vernacular_clause ?? false}
+                    onChange={(e) => setAff((s) => ({ ...s, include_vernacular_clause: e.target.checked }))}
+                    className="mt-1 h-4 w-4 rounded border-border/60 accent-primary"
+                  />
+                  <div>
+                    <Label htmlFor="a-vernacular" className="text-sm cursor-pointer">Include Vernacular Explanation Clause</Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Adds a clause that the affidavit was read over and explained to the deponent in the specified language.
+                    </p>
+                  </div>
+                </div>
+                {aff.include_vernacular_clause && (
+                  <F label="Vernacular Language" id="a-vern-lang" value={aff.vernacular_language ?? 'Marathi'} onChange={a('vernacular_language')} placeholder="e.g. Marathi, Hindi, Kannada" />
+                )}
+
                 <Button disabled={isExporting} className="w-full gold-gradient text-primary-foreground" onClick={() => void download(generateAffidavit(aff, profile?.firm_logo_url), 'Affidavit-Draft.pdf')}>
                   {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />} Download Draft PDF
                 </Button>

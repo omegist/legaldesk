@@ -264,12 +264,17 @@ export interface AffidavitData {
   deponent_age: string;
   deponent_address: string;
   deponent_occupation: string;
+  deponent_id_proof?: string;
   statements: string;
   court_name?: string;
   case_number?: string;
   case_title?: string;
   /** Court affidavits use plain A4. The private option leaves unprinted space for genuine official stamping when required. */
   paper_mode?: 'court' | 'stamp-paper';
+  advocate_name?: string;
+  advocate_enrollment?: string;
+  include_vernacular_clause?: boolean;
+  vernacular_language?: string;
   place: string;
   date: string;
 }
@@ -284,15 +289,20 @@ export interface AffidavitData {
 export function generateAffidavit(d: AffidavitData, logoUrl?: string | null): Blob {
   const W = 210;
   const H = 297;
-  const ML = 25;
+  // Court-compliant margins: 38 mm left (for file binding/punching), 20 mm others
+  const ML = 38;
   const MR = 20;
+  const MT = 20;
   const printW = W - ML - MR;
-  const pageBottom = H - 24;
+  const pageBottom = H - 20;
+  const lineHeight = 1.45;       // court-standard line spacing
+  const bodySize = 11;
+  const lineStep = bodySize * 0.3528 * lineHeight; // pt→mm × spacing ≈ 5.63 mm
   const textDark: [number, number, number] = [0, 0, 0];
   const textGray: [number, number, number] = [70, 70, 70];
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const isStampPaperLayout = d.paper_mode === 'stamp-paper';
-  let y = isStampPaperLayout ? 102 : 24;
+  let y = isStampPaperLayout ? 102 : MT;
 
   const dateStr = /^\d{4}-\d{2}-\d{2}$/.test(d.date || '')
     ? new Date(`${d.date}T00:00:00Z`).toLocaleDateString('en-GB', {
@@ -307,31 +317,33 @@ export function generateAffidavit(d: AffidavitData, logoUrl?: string | null): Bl
 
   const startContinuationPage = () => {
     doc.addPage('a4');
-    y = 24;
+    y = MT;
     doc.setFont('times', 'normal');
-    doc.setFontSize(11);
+    doc.setFontSize(bodySize);
     doc.setTextColor(...textDark);
   };
 
+  // ── Fix #1: Strip duplicate "IN THE COURT OF" from user input ─────────────
   doc.setFont('times', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(...textDark);
   if (d.court_name) {
-    doc.text(`IN THE COURT OF ${d.court_name.toUpperCase()}`, W / 2, y, { align: 'center' });
+    const cleanCourt = d.court_name.replace(/^in\s+the\s+court\s+of\s+/i, '').trim();
+    doc.text(`IN THE COURT OF ${cleanCourt.toUpperCase()}`, W / 2, y, { align: 'center' });
     y += 7;
   }
   if (d.case_number) {
     doc.setFont('times', 'normal');
-    doc.setFontSize(11);
+    doc.setFontSize(bodySize);
     doc.text(d.case_number, W / 2, y, { align: 'center' });
     y += 7;
   }
   if (d.case_title) {
     doc.setFont('times', 'normal');
-    doc.setFontSize(11);
+    doc.setFontSize(bodySize);
     const caseLines = doc.splitTextToSize(d.case_title, printW);
     doc.text(caseLines, W / 2, y, { align: 'center' });
-    y += caseLines.length * 5 + 5;
+    y += caseLines.length * lineStep + 5;
   }
 
   doc.setFont('times', 'bold');
@@ -339,68 +351,125 @@ export function generateAffidavit(d: AffidavitData, logoUrl?: string | null): Bl
   doc.text('AFFIDAVIT', W / 2, y, { align: 'center' });
   y += 11;
 
+  // ── Deponent introduction ─────────────────────────────────────────────────
   doc.setFont('times', 'normal');
-  doc.setFontSize(11);
+  doc.setFontSize(bodySize);
   const relation = d.deponent_father_name
     ? `, ${d.deponent_relation || 'son/daughter/spouse'} of ${d.deponent_father_name}`
     : '';
-  const intro = `I, ${d.deponent_name || '____________________________'}${relation}, aged about ${d.deponent_age || '____'} years, occupation ${d.deponent_occupation || '________________'}, residing at ${d.deponent_address || '____________________________________________'}, do hereby solemnly affirm and state as follows:`;
+  // Fix #3: Append ID proof after occupation if provided
+  const idSuffix = d.deponent_id_proof?.trim()
+    ? `, holding ${d.deponent_id_proof.trim()},`
+    : '';
+  const intro = `I, ${d.deponent_name || '____________________________'}${relation}, aged about ${d.deponent_age || '____'} years, occupation ${d.deponent_occupation || '________________'}${idSuffix}, residing at ${d.deponent_address || '____________________________________________'}, do hereby solemnly affirm and state as follows:`;
   const introLines = doc.splitTextToSize(intro, printW);
   doc.text(introLines, ML, y);
-  y += introLines.length * 5.5 + 8;
+  y += introLines.length * lineStep + 8;
 
+  // ── Numbered statements ───────────────────────────────────────────────────
   const paragraphIndent = 10;
   for (let index = 0; index < paragraphs.length; index += 1) {
     let statement = paragraphs[index].trim().replace(/^\d+[.)\s]+/, '');
     if (!/^that\s/i.test(statement)) statement = `That ${statement}`;
     const statementLines = doc.splitTextToSize(statement, printW - paragraphIndent);
-    if (y + statementLines.length * 5.5 + 8 > pageBottom - 70) startContinuationPage();
+    if (y + statementLines.length * lineStep + 8 > pageBottom - 70) startContinuationPage();
     doc.setFont('times', 'normal');
-    doc.setFontSize(11);
+    doc.setFontSize(bodySize);
     doc.text(`${index + 1}.`, ML, y);
     doc.text(statementLines, ML + paragraphIndent, y);
-    y += statementLines.length * 5.5 + 5;
+    y += statementLines.length * lineStep + 5;
   }
 
-  // Verification, signing and jurat need roughly 100 mm. Never let them collide
-  // with the footer or split the execution block across pages.
-  if (y > pageBottom - 108) startContinuationPage();
+  // ── Verification ──────────────────────────────────────────────────────────
+  // Verification, signing, advocate ID, vernacular clause and jurat need ~120 mm
+  if (y > pageBottom - 125) startContinuationPage();
   y += 6;
   doc.setFont('times', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(bodySize);
   doc.text('VERIFICATION', ML, y);
   y += 7;
   doc.setFont('times', 'normal');
   const verification = `Verified at ${placeStr} on ${dateStr} that the statements in paragraphs 1 to ${paragraphs.length} are true to my personal knowledge, except where stated to be based on information or belief, which I believe to be true.`;
   const verificationLines = doc.splitTextToSize(verification, printW);
   doc.text(verificationLines, ML, y);
-  y += verificationLines.length * 5.5 + 15;
+  y += verificationLines.length * lineStep + 15;
 
+  // ── Signature area ────────────────────────────────────────────────────────
   doc.setFontSize(10);
   doc.setTextColor(...textGray);
   doc.text(`Place: ${placeStr}`, ML, y);
   doc.text(`Date: ${dateStr}`, ML, y + 6);
+
   doc.setFont('times', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(bodySize);
   doc.setTextColor(...textDark);
   doc.text('DEPONENT', W - MR, y, { align: 'right' });
   doc.setFont('times', 'normal');
   doc.setFontSize(10);
   doc.text(`(${d.deponent_name || '____________________________'})`, W - MR, y + 6, { align: 'right' });
 
-  y += 30;
+  // ── Fix #4: "Identified by Advocate" block (bottom-left) ──────────────────
+  y += 24;
+  if (d.advocate_name?.trim()) {
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...textDark);
+    doc.text('Identified by me:', ML, y);
+    y += 12;
+    doc.setFont('times', 'bold');
+    doc.text(d.advocate_name.trim(), ML, y);
+    y += 5;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...textGray);
+    const enrollText = d.advocate_enrollment?.trim()
+      ? `Advocate (Reg. No: ${d.advocate_enrollment.trim()})`
+      : 'Advocate';
+    doc.text(enrollText, ML, y);
+    y += 10;
+  } else {
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...textGray);
+    doc.text('Identified by me:', ML, y);
+    y += 12;
+    doc.text('______________________________', ML, y);
+    doc.text('Advocate (Reg. No: __________)', ML, y + 5);
+    y += 15;
+  }
+
+  // ── Jurat ─────────────────────────────────────────────────────────────────
+  y += 4;
   doc.setFont('times', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...textDark);
   const jurat = `Solemnly affirmed at ${placeStr} on ${dateStr} by the above-named deponent before the undersigned authorised officer.`;
   const juratLines = doc.splitTextToSize(jurat, printW);
   doc.text(juratLines, ML, y);
-  y += juratLines.length * 5 + 14;
+  y += juratLines.length * 5 + 6;
+
+  // ── Fix #5: Vernacular explanation clause ──────────────────────────────────
+  if (d.include_vernacular_clause) {
+    const lang = d.vernacular_language?.trim() || 'Marathi/vernacular';
+    const vernacularText = `The contents of this affidavit have been read over, explained, and interpreted in ${lang} language to the Deponent, who appeared to understand the same and affixed his/her signature/thumb impression in my presence.`;
+    const vernLines = doc.splitTextToSize(vernacularText, printW);
+    if (y + vernLines.length * 5 + 10 > pageBottom - 30) startContinuationPage();
+    doc.setFont('times', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(...textDark);
+    doc.text(vernLines, ML, y);
+    y += vernLines.length * 5 + 8;
+  }
+
+  // ── Authorised Officer seal area ──────────────────────────────────────────
+  y += 8;
   doc.setFontSize(9);
   doc.setTextColor(...textGray);
+  doc.setFont('times', 'normal');
   doc.text('Signature and seal of authorised officer', W - MR, y, { align: 'right' });
   doc.text('(Complete designation as applicable)', W - MR, y + 5, { align: 'right' });
 
+  // ── Footer ────────────────────────────────────────────────────────────────
   doc.setFontSize(7);
   const footer = isStampPaperLayout
     ? 'DRAFT ONLY. The blank top area is not a stamp. Use only a genuine official stamp, franking or e-SBTR if required and confirmed by the authorised provider.'

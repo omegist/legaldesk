@@ -61,6 +61,7 @@ export type Database = {
       }
       diaries: {
         Row: {
+          case_status: string
           case_number: string
           case_type: string
           client_email: string | null
@@ -69,6 +70,9 @@ export type Database = {
           cnr_last_synced_at: string | null
           cnr_number: string | null
           cnr_sync_enabled: boolean
+          is_initial_imported: boolean
+          last_synced_at: string | null
+          next_hearing_date: string | null
           court_name: string
           court_number: string | null
           created_at: string
@@ -90,6 +94,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          case_status?: string
           case_number: string
           case_type: string
           client_email?: string | null
@@ -98,6 +103,9 @@ export type Database = {
           cnr_last_synced_at?: string | null
           cnr_number?: string | null
           cnr_sync_enabled?: boolean
+          is_initial_imported?: boolean
+          last_synced_at?: string | null
+          next_hearing_date?: string | null
           court_name: string
           court_number?: string | null
           created_at?: string
@@ -119,6 +127,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          case_status?: string
           case_number?: string
           case_type?: string
           client_email?: string | null
@@ -127,6 +136,9 @@ export type Database = {
           cnr_last_synced_at?: string | null
           cnr_number?: string | null
           cnr_sync_enabled?: boolean
+          is_initial_imported?: boolean
+          last_synced_at?: string | null
+          next_hearing_date?: string | null
           court_name?: string
           court_number?: string | null
           created_at?: string
@@ -582,6 +594,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          auto_sync_enabled: boolean
           city: string | null
           court_name: string | null
           created_at: string
@@ -601,6 +614,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_sync_enabled?: boolean
           city?: string | null
           court_name?: string | null
           created_at?: string
@@ -620,6 +634,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_sync_enabled?: boolean
           city?: string | null
           court_name?: string | null
           created_at?: string
@@ -650,6 +665,7 @@ export type Database = {
       }
       subscriptions: {
         Row: {
+          auto_sync_enabled: boolean
           cancel_at_period_end: boolean
           created_at: string
           current_period_end: string | null
@@ -662,6 +678,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          auto_sync_enabled?: boolean
           cancel_at_period_end?: boolean
           created_at?: string
           current_period_end?: string | null
@@ -674,6 +691,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          auto_sync_enabled?: boolean
           cancel_at_period_end?: boolean
           created_at?: string
           current_period_end?: string | null

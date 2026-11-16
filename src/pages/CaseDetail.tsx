@@ -142,7 +142,13 @@ export default function CaseDetail() {
   const handleSaveCnr = async () => {
     if (!diary || !cnrInput.trim()) return;
     setIsSavingCnr(true);
-    let query = supabase.from('diaries').update({ cnr_number: cnrInput.trim(), cnr_sync_enabled: true }).eq('id', diary.id);
+    const normalizedCnr = cnrInput.trim().toUpperCase();
+    let query = supabase.from('diaries').update({
+      cnr_number: normalizedCnr,
+      is_initial_imported: false,
+      last_synced_at: null,
+      cnr_last_synced_at: null,
+    }).eq('id', diary.id);
     if (lastKnownUpdatedAt.current) query = query.eq('updated_at', lastKnownUpdatedAt.current);
     const { data, error } = await query.select().maybeSingle();
     setIsSavingCnr(false);
@@ -150,35 +156,38 @@ export default function CaseDetail() {
     if (!data) { toast({ title: 'Conflict detected', description: 'Another user modified this case. Please refresh.', variant: 'destructive' }); return; }
     lastKnownUpdatedAt.current = (data as any).updated_at ?? null;
     setDiary(data as Diary);
-    toast({ title: 'CNR saved', description: 'Click "Sync now" to pull the latest court data. Syncing is limited to once every 12 hours per case.' });
+    toast({ title: 'CNR saved', description: 'Importing this CNR once. Later checks use the lower-credit refresh route.' });
+    await syncCnr(data.id, 'initial_import');
   };
 
-  const handleToggleAutoSync = async () => {
-    if (!diary) return;
-    const { data, error } = await supabase.from('diaries').update({ cnr_sync_enabled: !diary.cnr_sync_enabled }).eq('id', diary.id).select().single();
-    if (!error) setDiary(data as Diary);
+  const syncCnr = async (diaryId: string, action: 'initial_import' | 'manual_refresh') => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-case-from-cnr`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sessionData.session?.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ diaryId, action }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || 'Sync failed');
+    const { data: refreshed } = await supabase.from('diaries').select('*').eq('id', diaryId).maybeSingle();
+    if (refreshed) setDiary(refreshed as Diary);
+    return result;
   };
 
   const handleSyncNow = async () => {
     if (!diary) return;
-    if (profile?.subscription_tier === 'free' && !profile?.firm_id) {
-      toast({ title: 'Upgrade required', description: 'CNR sync is available on Pro and above.', variant: 'destructive' });
+    if (profile?.auto_sync_enabled) {
+      toast({ title: 'Auto-sync is active', description: 'This paid account is checked automatically after court hours.' });
+      return;
+    }
+    if (diary.last_synced_at && Date.now() - new Date(diary.last_synced_at).getTime() < 15 * 60_000) {
+      toast({ title: 'Refresh available shortly', description: 'Please wait 15 minutes between manual refreshes.' });
       return;
     }
     setIsSyncingCnr(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-case-from-cnr`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ diaryId: diary.id }),
-      });
-      const result = await res.json();
-      if (!res.ok) { toast({ title: 'Sync failed', description: result.error, variant: 'destructive' }); return; }
-      toast({ title: 'Synced from eCourts', description: `${result.timelineEntriesAdded} timeline entries added.` });
-      const { data: refreshed } = await supabase.from('diaries').select('*').eq('id', diary.id).maybeSingle();
-      if (refreshed) setDiary(refreshed as Diary);
+      await syncCnr(diary.id, 'manual_refresh');
+      toast({ title: 'Case refreshed', description: 'Latest case status and next hearing date were checked.' });
     } catch (err) {
       toast({ title: 'Could not reach the sync service', description: String(err), variant: 'destructive' });
     } finally {
@@ -372,30 +381,36 @@ export default function CaseDetail() {
               </div>
               {diary.cnr_number && (
                 <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Auto-sync upcoming hearings</span>
-                    <Button
-                      size="sm"
-                      variant={diary.cnr_sync_enabled ? 'default' : 'outline'}
-                      onClick={handleToggleAutoSync}
-                      className={diary.cnr_sync_enabled ? 'gold-gradient text-primary-foreground' : ''}
-                    >
-                      {diary.cnr_sync_enabled ? 'On' : 'Off'}
-                    </Button>
+                  <div className="flex items-center justify-between pt-1">
+                    {profile?.auto_sync_enabled ? (
+                      <span className="inline-flex items-center rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-400">
+                        Auto-Sync Active&nbsp;•&nbsp;Last checked: {diary.last_synced_at
+                          ? new Date(diary.last_synced_at).toLocaleString('en-IN')
+                          : 'not yet checked'}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-xs text-muted-foreground">
+                          {diary.last_synced_at
+                            ? `Last checked ${new Date(diary.last_synced_at).toLocaleString('en-IN')}`
+                            : diary.is_initial_imported ? 'Ready for a manual refresh' : 'Initial import pending'}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleSyncNow}
+                          disabled={isSyncingCnr || !diary.is_initial_imported}
+                        >
+                          {isSyncingCnr ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sync now'}
+                        </Button>
+                      </>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    When enabled, scheduled checks cover hearings due within 3 days. A case is never synced more than once every 12 hours.
+                    {profile?.auto_sync_enabled
+                      ? 'Eligible active cases are checked daily at 7:30 PM IST after court hours.'
+                      : 'Manual refresh checks status and the next hearing date only. One refresh is allowed every 15 minutes.'}
                   </p>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-xs text-muted-foreground">
-                      {diary.cnr_last_synced_at
-                        ? `Last synced ${new Date(diary.cnr_last_synced_at).toLocaleString('en-IN')}`
-                        : 'Never synced yet'}
-                    </span>
-                    <Button size="sm" variant="outline" onClick={handleSyncNow} disabled={isSyncingCnr}>
-                      {isSyncingCnr ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sync now'}
-                    </Button>
-                  </div>
                 </>
               )}
             </CardContent>

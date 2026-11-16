@@ -6,6 +6,8 @@ const supabase = createClient(
 );
 
 const ECOURTSINDIA_API_KEY = Deno.env.get('ECOURTSINDIA_API_KEY')!;
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
+const FROM_EMAIL = Deno.env.get('FROM_EMAIL') ?? 'VakilDesk <reminders@vakildesks.in>';
 
 const SYNC_WINDOW_DAYS = 3;
 const COOLDOWN_HOURS = 12;
@@ -32,6 +34,15 @@ Deno.serve(async (req) => {
   if (req.headers.get('x-cron-secret') !== cronSecret) {
     return new Response('Unauthorized', { status: 401 });
   }
+
+  // The legacy implementation below remains for deployment compatibility, but
+  // this is the only active path. It uses one bulk-refresh request per batch;
+  // it never performs the expensive GET case import or fetches court orders.
+  const result = await runCreditOptimizedAutoSync();
+  return new Response(JSON.stringify(result), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
 
   const istOffset = 5.5 * 60 * 60 * 1000;
   const nowIST = new Date(Date.now() + istOffset);
@@ -153,6 +164,104 @@ Deno.serve(async (req) => {
     { status: 200, headers: { 'Content-Type': 'application/json' } },
   );
 });
+
+async function runCreditOptimizedAutoSync() {
+  const todayIST = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const { data: candidates, error } = await supabase
+    .rpc('get_auto_sync_candidate_cases', { p_today: todayIST });
+  if (error) throw new Error(error.message);
+  if (!candidates?.length) return { synced: 0, failed: 0, total: 0 };
+
+  const eligible = candidates;
+
+  let synced = 0;
+  let failed = 0;
+  const BATCH_SIZE = 100;
+  for (let start = 0; start < eligible.length; start += BATCH_SIZE) {
+    const batch = eligible.slice(start, start + BATCH_SIZE);
+    const response = await fetch('https://webapi.ecourtsindia.com/api/partner/case/bulk-refresh', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${ECOURTSINDIA_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ cnrNumbers: batch.map((item) => item.cnr_number) }),
+    });
+    if (!response.ok) {
+      console.error('eCourts bulk-refresh failed:', response.status);
+      failed += batch.length;
+      continue;
+    }
+
+    const payload = await response.json();
+    const results = payload?.data?.results ?? payload?.results ?? payload?.data ?? [];
+    const byCnr = new Map((Array.isArray(results) ? results : []).map((item: any) => [
+      String(item.cnrNumber ?? item.cnr_number ?? item?.courtCaseData?.cnrNumber ?? '').toUpperCase(),
+      item.courtCaseData ?? item,
+    ]));
+
+    for (const diary of batch) {
+      const courtCase = byCnr.get(String(diary.cnr_number).toUpperCase());
+      if (!courtCase) { failed++; continue; }
+      const nextDate = typeof courtCase.nextHearingDate === 'string' ? courtCase.nextHearingDate : null;
+      const disposed = String(courtCase.caseStatus ?? '').toUpperCase() === 'DISPOSED';
+      const update: Record<string, unknown> = {
+        case_status: disposed ? 'DISPOSED' : 'ACTIVE',
+        status: disposed ? 'disposed' : 'active',
+        last_synced_at: new Date().toISOString(),
+        cnr_last_synced_at: new Date().toISOString(),
+      };
+      // If the clerk has not published a new date, retain today's date so this
+      // diary is selected again tomorrow. A newly published future date stops it.
+      if (nextDate) {
+        update.next_hearing_date = nextDate;
+        update.matter_date = nextDate;
+      }
+      const { error: updateError } = await supabase.from('diaries').update(update).eq('id', diary.id);
+      if (updateError) { failed++; continue; }
+
+      if (nextDate && nextDate !== diary.next_hearing_date) {
+        // This is the existing in-app case timeline notification. Email delivery
+        // remains governed by the user's existing notification settings.
+        await supabase.from('diary_timeline_entries').insert({
+          diary_id: diary.id,
+          entry_date: todayIST,
+          entry_type: 'order',
+          content: `Next hearing date updated to ${nextDate} by eCourts auto-sync.`,
+          created_by: diary.lawyer_id,
+        });
+        await notifyDateChange(diary.lawyer_id, nextDate, diary.cnr_number);
+      }
+      synced++;
+    }
+  }
+  return { synced, failed, total: eligible.length };
+}
+
+async function notifyDateChange(lawyerId: string, nextDate: string, cnrNumber: string) {
+  const [{ data: profile }, { data: settings }] = await Promise.all([
+    supabase.from('profiles').select('name, email').eq('id', lawyerId).maybeSingle(),
+    supabase.from('notification_settings').select('email_enabled').eq('user_id', lawyerId).maybeSingle(),
+  ]);
+  if (!RESEND_API_KEY || !profile?.email || settings?.email_enabled === false) return;
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: FROM_EMAIL,
+      to: profile.email,
+      subject: `Hearing date updated for ${cnrNumber}`,
+      html: `<p>Hello ${escapeHtml(profile.name)},</p><p>eCourts has updated the next hearing date for CNR <strong>${escapeHtml(cnrNumber)}</strong> to <strong>${escapeHtml(nextDate)}</strong>.</p>`,
+    }),
+  });
+  if (!response.ok) console.error('Date-change email failed:', response.status);
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>'"]/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
+  }[char] ?? char));
+}
 
 function formatPartyNames(petitioners: string[] = [], respondents: string[] = []): string {
   const p = petitioners.length ? petitioners.join(', ') : 'Unknown';

@@ -55,6 +55,7 @@ Deno.serve(async (req) => {
     .update({
       status: newStatus,
       current_period_end: sub.current_end ? new Date(sub.current_end * 1000).toISOString() : null,
+      auto_sync_enabled: newStatus === 'active',
     })
     .eq('id', row.id);
 
@@ -97,7 +98,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    const profileUpdate: Record<string, unknown> = { subscription_tier: row.tier };
+    const profileUpdate: Record<string, unknown> = {
+      subscription_tier: row.tier,
+      auto_sync_enabled: true,
+    };
     if (isMultiUser) profileUpdate.firm_id = row.user_id;
 
     const { error: profileError } = await supabase
@@ -109,12 +113,24 @@ Deno.serve(async (req) => {
       console.error('Failed to update profile tier/firm_id:', profileError.message);
       return new Response('Internal error', { status: 500 });
     }
+
+    if (isMultiUser) {
+      const { error: memberError } = await supabase
+        .from('profiles')
+        .update({ auto_sync_enabled: true })
+        .eq('firm_id', row.user_id)
+        .neq('id', row.user_id);
+      if (memberError) {
+        console.error('Failed to enable member auto-sync:', memberError.message);
+        return new Response('Internal error', { status: 500 });
+      }
+    }
   } else if (newStatus === 'halted') {
     // Payment failed — downgrade to free but keep firm_id briefly so members
     // aren't immediately kicked while the lawyer resolves the payment issue.
     const { error } = await supabase
       .from('profiles')
-      .update({ subscription_tier: 'free' })
+      .update({ subscription_tier: 'free', auto_sync_enabled: false })
       .eq('id', row.user_id);
     if (error) {
       console.error('Failed to downgrade halted subscription:', error.message);
@@ -124,7 +140,7 @@ Deno.serve(async (req) => {
     // Clear firm_id for the owner AND all members
     const { error: ownerErr } = await supabase
       .from('profiles')
-      .update({ subscription_tier: 'free', firm_id: null })
+      .update({ subscription_tier: 'free', firm_id: null, auto_sync_enabled: false })
       .eq('id', row.user_id);
     if (ownerErr) {
       console.error('Failed to clear owner firm_id:', ownerErr.message);
@@ -133,7 +149,7 @@ Deno.serve(async (req) => {
 
     const { error: membersErr } = await supabase
       .from('profiles')
-      .update({ firm_id: null })
+      .update({ firm_id: null, auto_sync_enabled: false })
       .eq('firm_id', row.user_id)
       .neq('id', row.user_id);
     if (membersErr) {

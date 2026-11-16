@@ -14,6 +14,7 @@ export interface Profile {
   phone: string | null;
   role: UserRole;
   subscription_tier: SubscriptionTier;
+  auto_sync_enabled: boolean;
   firm_id: string | null;
   practice_area: string | null;
   court_name: string | null;
@@ -51,6 +52,10 @@ export interface Diary {
   cnr_number: string | null;
   cnr_sync_enabled: boolean;
   cnr_last_synced_at: string | null;
+  case_status: 'ACTIVE' | 'DISPOSED';
+  next_hearing_date: string | null;
+  last_synced_at: string | null;
+  is_initial_imported: boolean;
   created_at: string;
   updated_at: string;
 }

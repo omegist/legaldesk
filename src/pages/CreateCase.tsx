@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Lock, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,7 +25,6 @@ export default function CreateCase() {
   const { user, profile } = useAuth();
   const { canCreateCase, limit, activeCases, tierLabel } = useSubscriptionLimits();
   const [isSaving, setIsSaving] = useState(false);
-  const [isLookingUpCnr, setIsLookingUpCnr] = useState(false);
 
   const [form, setForm] = useState({
     matter_date: '',
@@ -50,53 +49,6 @@ export default function CreateCase() {
   const set = (key: keyof typeof form) => (value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const lookupCnr = async () => {
-    const cnr = form.cnr_number.trim().toUpperCase();
-    if (!cnr) {
-      toast({ title: 'Enter the CNR number first', description: 'Use the CNR shown on the eCourts case record.' });
-      return;
-    }
-    setIsLookingUpCnr(true);
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-case-from-cnr`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${sessionData.session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ cnrNumber: cnr, previewOnly: true }),
-      });
-      const result = await res.json();
-      if (!res.ok) {
-        toast({
-          title: result.error === 'upgrade_required' ? 'Paid plan required' : 'Could not sync this CNR',
-          description: result.error === 'upgrade_required' ? 'eCourts case sync is available on paid plans.' : result.error,
-          variant: 'destructive',
-        });
-        return;
-      }
-      setForm((current) => ({
-        ...current,
-        matter_date: result.case.matter_date ?? current.matter_date,
-        court_name: result.case.court_name ?? current.court_name,
-        court_number: result.case.court_number ?? current.court_number,
-        case_type: result.case.case_type ?? current.case_type,
-        case_number: result.case.case_number ?? current.case_number,
-        party_names: result.case.party_names ?? current.party_names,
-        judge_name: result.case.judge_name ?? current.judge_name,
-        purpose_of_hearing: result.case.purpose_of_hearing ?? current.purpose_of_hearing,
-        opponent_advocate: result.case.opponent_advocate ?? current.opponent_advocate,
-        cnr_number: cnr,
-      }));
-      toast({ title: 'Court details loaded', description: 'Review the imported details, then save the case.' });
-    } catch (error) {
-      toast({ title: 'Could not reach eCourts sync', description: String(error), variant: 'destructive' });
-    } finally {
-      setIsLookingUpCnr(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -114,9 +66,10 @@ export default function CreateCase() {
         case_type: form.case_type,
         case_number: form.case_number,
         cnr_number: form.cnr_number.trim().toUpperCase() || null,
-        // Users explicitly opt into recurring checks from Case Detail.
         cnr_sync_enabled: false,
-        cnr_last_synced_at: form.cnr_number.trim() ? new Date().toISOString() : null,
+        is_initial_imported: false,
+        next_hearing_date: form.matter_date || null,
+        case_status: 'ACTIVE',
         party_names: form.party_names,
         client_name: form.client_name || null,
         client_phone: form.client_phone || null,
@@ -145,7 +98,26 @@ export default function CreateCase() {
       return;
     }
 
-    toast({ title: 'Case added', description: `${form.case_number} is now in your diary.` });
+    if (form.cnr_number.trim()) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const importResponse = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-case-from-cnr`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${sessionData.session?.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ diaryId: data.id, action: 'initial_import' }),
+        });
+        if (!importResponse.ok) {
+          const result = await importResponse.json();
+          toast({ title: 'Case saved; CNR import pending', description: result.error || 'Open the case to retry the initial import.', variant: 'destructive' });
+        } else {
+          toast({ title: 'Case added and imported', description: 'Future checks will use the lower-credit refresh route.' });
+        }
+      } catch {
+        toast({ title: 'Case saved; CNR import pending', description: 'Open the case to retry the initial import.', variant: 'destructive' });
+      }
+    } else {
+      toast({ title: 'Case added', description: `${form.case_number} is now in your diary.` });
+    }
     navigate(`/cases/${data.id}`);
   };
 
@@ -189,21 +161,16 @@ export default function CreateCase() {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="cnr_number">eCourts CNR number (paid plans)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="cnr_number"
-                    value={form.cnr_number}
-                    onChange={(e) => set('cnr_number')(e.target.value.toUpperCase())}
-                    placeholder="e.g. MHTH010040472025"
-                    className="bg-secondary/50 font-mono"
-                    autoCapitalize="characters"
-                  />
-                  <Button type="button" variant="outline" onClick={lookupCnr} disabled={isLookingUpCnr}>
-                    {isLookingUpCnr ? <Loader2 className="h-4 w-4 animate-spin" /> : <><RefreshCw className="mr-1 h-4 w-4" /> Sync case</>}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">Enter the CNR and sync to fill case details from eCourts. Review them before saving.</p>
+                <Label htmlFor="cnr_number">eCourts CNR number</Label>
+                <Input
+                  id="cnr_number"
+                  value={form.cnr_number}
+                  onChange={(e) => set('cnr_number')(e.target.value.toUpperCase())}
+                  placeholder="e.g. MHTH010040472025"
+                  className="bg-secondary/50 font-mono"
+                  autoCapitalize="characters"
+                />
+                <p className="text-xs text-muted-foreground">After saving, VakilDesk imports this CNR once. Existing firm CNRs are reused without another eCourts import.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="matter_date">Next date *</Label>

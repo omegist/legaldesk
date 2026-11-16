@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useOfflineCases } from '@/hooks/useOfflineCases';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Briefcase, Gavel, ClipboardList, Loader2, Clock, MapPin, UserPlus, ChevronLeft, ChevronRight, WifiOff } from 'lucide-react';
+import { DashboardSkeleton } from '@/components/ui/skeleton-card';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -234,9 +235,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="flex justify-center py-10">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
+              <DashboardSkeleton />
             ) : hearingsSelected.length === 0 ? (
               <div className="text-center py-10 text-muted-foreground">
                 <Gavel className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -281,7 +280,7 @@ export default function Dashboard() {
 
       <Button
         onClick={() => navigate('/cases/new')}
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg gold-gradient text-primary-foreground"
+        className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-5 z-[60] h-14 w-14 rounded-full shadow-lg gold-gradient text-primary-foreground md:bottom-6 md:right-6"
         aria-label="Create new case"
       >
         <Plus className="h-6 w-6" />

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Loader2, Gavel, MapPin, Clock, Plus, WifiOff } from 'lucide-react';
+import { CaseListSkeleton } from '@/components/ui/skeleton-card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -99,9 +100,7 @@ export default function Cases() {
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          </div>
+          <CaseListSkeleton />
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <Gavel className="h-10 w-10 mx-auto mb-3 opacity-40" />

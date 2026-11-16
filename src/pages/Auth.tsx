@@ -241,19 +241,21 @@ export default function Auth() {
               <form onSubmit={handleRecoveryLinkPassword} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="recovery-link-password">New password</Label>
-                  <Input
-                    id="recovery-link-password"
-                    type={showNewPassword ? 'text' : 'password'}
-                    required
-                    autoComplete="new-password"
-                    placeholder="At least 8 characters"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="bg-secondary/50 pr-10"
-                  />
-                  <button type="button" onClick={() => setShowNewPassword((v) => !v)} aria-label={showNewPassword ? 'Hide password' : 'Show password'} className="-mt-10 relative z-10 ml-auto mr-3 flex h-8 w-8 items-center justify-center text-muted-foreground">
-                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                  <div className="relative">
+                    <Input
+                      id="recovery-link-password"
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="new-password"
+                      placeholder="At least 8 characters"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="bg-secondary/50 pr-10"
+                    />
+                    <button type="button" onClick={() => setShowNewPassword((v) => !v)} aria-label={showNewPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
                 <Button type="submit" className="w-full gold-gradient text-primary-foreground" disabled={isSubmitting}>
                   {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Set new password'}
@@ -374,19 +376,21 @@ export default function Auth() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="new-password">New password</Label>
-                  <Input
-                    id="new-password"
-                    type={showNewPassword ? 'text' : 'password'}
-                    required
-                    autoComplete="new-password"
-                    placeholder="At least 8 characters"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="bg-secondary/50 pr-10"
-                  />
-                  <button type="button" onClick={() => setShowNewPassword((v) => !v)} aria-label={showNewPassword ? 'Hide password' : 'Show password'} className="-mt-10 relative z-10 ml-auto mr-3 flex h-8 w-8 items-center justify-center text-muted-foreground">
-                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                  <div className="relative">
+                    <Input
+                      id="new-password"
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="new-password"
+                      placeholder="At least 8 characters"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="bg-secondary/50 pr-10"
+                    />
+                    <button type="button" onClick={() => setShowNewPassword((v) => !v)} aria-label={showNewPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
                 <Button
                   type="submit"
@@ -450,19 +454,21 @@ export default function Auth() {
                           Forgot password?
                         </button>
                       </div>
-                      <Input
-                        id="signin-password"
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        autoComplete="current-password"
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="bg-secondary/50 pr-10"
-                      />
-                      <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="-mt-10 relative z-10 ml-auto mr-3 flex h-8 w-8 items-center justify-center text-muted-foreground">
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
+                      <div className="relative">
+                        <Input
+                          id="signin-password"
+                          type={showPassword ? 'text' : 'password'}
+                          required
+                          autoComplete="current-password"
+                          placeholder="••••••••"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="bg-secondary/50 pr-10"
+                        />
+                        <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </div>
                     <Button
                       type="submit"
@@ -519,19 +525,21 @@ export default function Auth() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="signup-password">Password</Label>
-                      <Input
-                        id="signup-password"
-                        type={showNewPassword ? 'text' : 'password'}
-                        required
-                        autoComplete="new-password"
-                        placeholder="At least 8 characters"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="bg-secondary/50 pr-10"
-                      />
-                      <button type="button" onClick={() => setShowNewPassword((v) => !v)} aria-label={showNewPassword ? 'Hide password' : 'Show password'} className="-mt-10 relative z-10 ml-auto mr-3 flex h-8 w-8 items-center justify-center text-muted-foreground">
-                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
+                      <div className="relative">
+                        <Input
+                          id="signup-password"
+                          type={showNewPassword ? 'text' : 'password'}
+                          required
+                          autoComplete="new-password"
+                          placeholder="At least 8 characters"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="bg-secondary/50 pr-10"
+                        />
+                        <button type="button" onClick={() => setShowNewPassword((v) => !v)} aria-label={showNewPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
+                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label>I am a</Label>

@@ -10,17 +10,37 @@ async function authorizedRequest(path: string, init: RequestInit = {}) {
 
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${session.access_token}`);
-  try {
-    return await fetch(`${workerUrl}${path}`, { ...init, headers });
-  } catch (error) {
-    if (error instanceof TypeError && /fetch/i.test(error.message)) {
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'this app';
-      throw new Error(
-        `Could not connect to Vault storage from ${origin}. Check your connection and the storage service's allowed origins.`,
-      );
+
+  // Capacitor Android WebView sometimes reports its origin as
+  // "https://localhost" or "http://localhost" — the Worker CORS config
+  // must include all variants. We also need `mode: 'cors'` explicitly
+  // so the browser attaches the Origin header.
+  const fetchInit: RequestInit = { ...init, headers, mode: 'cors' };
+
+  // Retry once — the first cold-start fetch from a Capacitor WebView
+  // can hit a transient network error or a TLS handshake timeout.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const resp = await fetch(`${workerUrl}${path}`, fetchInit);
+      return resp;
+    } catch (error) {
+      if (attempt === 0 && error instanceof TypeError && /fetch|network|failed/i.test(error.message)) {
+        // Wait 1.5 s and retry once
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
+      if (error instanceof TypeError && /fetch|network|failed/i.test(error.message)) {
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'this app';
+        throw new Error(
+          `Could not connect to Vault storage from ${origin}. `
+          + `Check your internet connection. If the problem persists, the storage service may need to allow this app's origin.`,
+        );
+      }
+      throw error;
     }
-    throw error;
   }
+  // Unreachable, but satisfies TypeScript
+  throw new Error('Could not connect to document storage.');
 }
 
 export async function uploadDocumentToR2(file: File) {

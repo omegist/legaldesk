@@ -121,8 +121,9 @@ export default function Templates() {
 
   // ── Affidavit ──
   const [aff, setAff] = useState<AffidavitData>({
-    deponent_name: '', deponent_age: '', deponent_address: '', deponent_occupation: '',
-    statements: '', place: profile?.city ?? '', date: today,
+    deponent_name: '', deponent_father_name: '', deponent_relation: '', deponent_age: '', deponent_address: '', deponent_occupation: '',
+    statements: '', court_name: '', case_number: '', case_title: '', paper_mode: 'court',
+    place: profile?.city ?? '', date: today,
   });
 
   const v = <K extends keyof VakalatData>(k: K) => (val: string) => setVak((s) => ({ ...s, [k]: val }));
@@ -296,16 +297,68 @@ export default function Templates() {
             <Card className="glass-effect border-primary/20">
               <CardHeader>
                 <CardTitle className="font-serif text-lg">Affidavit</CardTitle>
-                <p className="text-xs text-amber-400 mt-1">⚠ Draft only — must be executed on stamp paper before a Notary.</p>
+                <p className="text-xs text-amber-400 mt-1">⚠ Draft only — have the filing court or authorised officer confirm the execution requirements before use.</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Generates a clean white A4 affidavit. It never reproduces a government stamp, e-SBTR, franking impression or notarial seal.
+                </p>
               </CardHeader>
               <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="a-paper-mode">Document use</Label>
+                  <select
+                    id="a-paper-mode"
+                    value={aff.paper_mode ?? 'court'}
+                    onChange={(e) => setAff((s) => ({ ...s, paper_mode: e.target.value as AffidavitData['paper_mode'] }))}
+                    className="w-full rounded-md border border-border/60 bg-secondary/50 px-3 py-2 text-sm"
+                  >
+                    <option value="court">Court filing — plain A4 (recommended)</option>
+                    <option value="stamp-paper">Private document — leave blank space for genuine stamping if instructed</option>
+                  </select>
+                  <p className="text-[11px] text-muted-foreground">
+                    {aff.paper_mode === 'stamp-paper'
+                      ? 'This leaves a 90 mm blank area at the top of page 1 only. It does not create a stamp or prove stamp duty has been paid.'
+                      : 'Court mode has no fake stamp area and prints on plain white A4.'}
+                  </p>
+                </div>
+
+                {/* Court / Case reference (optional) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <F label="Court Name (optional)" id="a-court" value={aff.court_name ?? ''} onChange={a('court_name')} placeholder="e.g. Civil Judge Senior Division, Thane" />
+                  <F label="Case No. (optional)" id="a-case" value={aff.case_number ?? ''} onChange={a('case_number')} placeholder="e.g. Special Civil Suit No. 412 of 2026" />
+                </div>
+                <TA label="Case Title / Parties (optional)" id="a-title" value={aff.case_title ?? ''} onChange={a('case_title')} placeholder={'e.g. Rajesh Kulkarni ... Plaintiff\nVersus\nABC Ltd. ... Defendant'} />
+
+                {/* Deponent info */}
                 <F label="Deponent Name" id="a-dn" value={aff.deponent_name} onChange={a('deponent_name')} />
+                <div className="grid grid-cols-2 gap-3">
+                  <F label="Parent / Spouse Name (optional)" id="a-fn" value={aff.deponent_father_name ?? ''} onChange={a('deponent_father_name')} />
+                  <div className="space-y-1.5">
+                    <Label htmlFor="a-relation">Relationship</Label>
+                    <select
+                      id="a-relation"
+                      value={aff.deponent_relation ?? ''}
+                      onChange={(e) => setAff((s) => ({ ...s, deponent_relation: e.target.value }))}
+                      className="w-full rounded-md border border-border/60 bg-secondary/50 px-3 py-2 text-sm"
+                    >
+                      <option value="">Select if used</option>
+                      <option value="son of">Son of</option>
+                      <option value="daughter of">Daughter of</option>
+                      <option value="wife of">Wife of</option>
+                      <option value="husband of">Husband of</option>
+                      <option value="child of">Child of</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <F label="Age" id="a-age" value={aff.deponent_age} onChange={a('deponent_age')} type="number" />
                   <F label="Occupation" id="a-occ" value={aff.deponent_occupation} onChange={a('deponent_occupation')} />
                 </div>
                 <TA label="Deponent Address" id="a-addr" value={aff.deponent_address} onChange={a('deponent_address')} />
-                <TA label="Statements / Declarations" id="a-stmt" value={aff.statements} onChange={a('statements')} placeholder="1. That I am the deponent herein...\n2. That..." />
+                <TA label="Statements / Declarations (one per line)" id="a-stmt" value={aff.statements} onChange={a('statements')} placeholder={"I am the deponent herein and am well conversant with the facts.\nThe facts stated herein are true to the best of my knowledge.\nI have not concealed any material facts."} />
+                <p className="-mt-1 text-[11px] text-muted-foreground">
+                  For any statement based on information or belief, include its source in that statement.
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                   <F label="Date" id="a-dt" value={aff.date} onChange={a('date')} type="date" />
                   <F label="Place" id="a-pl" value={aff.place} onChange={a('place')} />
